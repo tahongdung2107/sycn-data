@@ -1,1 +1,1 @@
-"# sycn-data" 
+Base đồng bộ dữ liệu từ api
