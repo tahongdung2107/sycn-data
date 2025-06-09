@@ -92,6 +92,64 @@ class NhanhAPIClient:
         
         return self.get_all_data(path, query_params, step_days, items_per_page, date_from_field, date_to_field, data_key)
 
+    def _analyze_data_structure(self, data):
+        """
+        Phân tích cấu trúc dữ liệu và trả về thông tin về các trường
+        :param data: Dữ liệu cần phân tích
+        :return: List các thông tin về trường
+        """
+        if not data or not isinstance(data, list) or len(data) == 0:
+            return []
+            
+        # Lấy mẫu dữ liệu đầu tiên để phân tích
+        sample = data[0]
+        table_info = []
+        seen_fields = {}  # Dictionary để theo dõi các trường đã xuất hiện
+        
+        def analyze_value(value):
+            if isinstance(value, (int, float)):
+                return "number"
+            elif isinstance(value, bool):
+                return "boolean"
+            elif isinstance(value, str):
+                return "string"
+            elif isinstance(value, list):
+                if len(value) > 0:
+                    # Phân tích phần tử đầu tiên của mảng
+                    first_item = value[0]
+                    if isinstance(first_item, dict):
+                        return {
+                            "type": "array",
+                            "items": self._analyze_data_structure([first_item])
+                        }
+                    else:
+                        return {
+                            "type": "array",
+                            "items": analyze_value(first_item)
+                        }
+                return "array"
+            elif isinstance(value, dict):
+                return {
+                    "type": "object",
+                    "properties": self._analyze_data_structure([value])
+                }
+            else:
+                return "unknown"
+        
+        for key, value in sample.items():
+            # Bỏ qua nếu trường đã xuất hiện trước đó
+            if key in seen_fields:
+                continue
+                
+            type_info = analyze_value(value)
+            table_info.append({
+                "field": key,
+                "type": type_info
+            })
+            seen_fields[key] = True  # Đánh dấu trường đã xuất hiện
+            
+        return table_info
+
     def get_all_data(self, path, params=None, step_days=None, items_per_page=100, date_from_field='updatedDateTimeFrom', date_to_field='updatedDateTimeTo', data_key='orders'):
         """
         Lấy tất cả dữ liệu trong khoảng thời gian
@@ -102,7 +160,7 @@ class NhanhAPIClient:
         :param date_from_field: Tên trường ngày bắt đầu
         :param date_to_field: Tên trường ngày kết thúc
         :param data_key: Tên key chứa dữ liệu trong response (mặc định là 'orders')
-        :return: List các dữ liệu
+        :return: Dictionary chứa data và table
         """
         all_data = []
         page = 1
@@ -199,4 +257,10 @@ class NhanhAPIClient:
                     
                 page += 1
             
-        return all_data
+        # Phân tích cấu trúc dữ liệu và tạo thông tin bảng
+        table_info = self._analyze_data_structure(all_data)
+            
+        return {
+            "data": all_data,
+            "table": table_info
+        }

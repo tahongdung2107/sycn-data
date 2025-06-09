@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 from service.fetchData import NhanhAPIClient
+from service.createTable import create_table
 import json
 
 class OrderService:
@@ -44,7 +45,7 @@ class OrderService:
         Chạy demo lấy đơn hàng và lưu vào file
         """
         # Lấy đơn hàng từ ngày 1-1-2025 đến hiện tại
-        end_date = datetime(2025, 1, 10)
+        end_date = datetime(2025, 1, 1)
         start_date = datetime(2025, 1, 1)  # Ngày 1-1-2025
         
         # Tham số bổ sung
@@ -52,7 +53,7 @@ class OrderService:
             'status': 'pending'  # Ví dụ: lấy đơn hàng có trạng thái pending
         }
         
-        orders = self.get_orders(
+        result = self.get_orders(
             path='/order/index',
             start_date=start_date,
             end_date=end_date,
@@ -63,6 +64,12 @@ class OrderService:
             date_to_field='updatedDateTimeTo',
             data_key='orders'
         )
+        
+        if result and 'table' in result:
+            # print(result['table'])
+            create_table(result['table'], 'orders')
+        else:
+            print("No table structure found in the response")
 
 
     
