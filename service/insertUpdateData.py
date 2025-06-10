@@ -34,11 +34,47 @@ class DataInserter:
             values = []
             for col in columns:
                 if col == 'id':
-                    values.append(f"N'{str(uuid.uuid4())}'")
+                    # Ưu tiên sử dụng Id từ data nếu có
+                    item_id = item.get('Id') or item.get('id') or str(uuid.uuid4())
+                    values.append(f"N'{item_id}'")
                 else:
-                    values.append(self._prepare_value(item.get(col)))
+                    val = item.get(col)
+                    if val is None:
+                        values.append('NULL')
+                    elif isinstance(val, (int, float)):
+                        values.append(str(val))
+                    elif isinstance(val, bool):
+                        values.append('1' if val else '0')
+                    elif isinstance(val, (dict, list)):
+                        values.append(f"'{json.dumps(val, ensure_ascii=False)}'")
+                    else:
+                        escaped_value = str(val).replace("'", "''")
+                        values.append(f"N'{escaped_value}'")
             values_list.append(f"({', '.join(values)})")
         return values_list
+
+    def _check_and_create_table(self, table_name: str, columns: List[str]):
+        """
+        Kiểm tra và tạo bảng nếu chưa tồn tại
+        """
+        try:
+            if self.db_manager.connect():
+                # Kiểm tra bảng có tồn tại không
+                check_table_query = f"""
+                IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = '{table_name}')
+                BEGIN
+                    CREATE TABLE {table_name} (
+                        id NVARCHAR(50) PRIMARY KEY,
+                        fk_id NVARCHAR(50),
+                        {', '.join([f'[{col}] NVARCHAR(MAX)' for col in columns if col not in ['id', 'fk_id']])}
+                    )
+                END
+                """
+                self.db_manager.cursor.execute(check_table_query)
+                self.db_manager.conn.commit()
+        except Exception as e:
+            print(f"Lỗi khi kiểm tra/tạo bảng {table_name}: {str(e)}")
+            self.db_manager.conn.rollback()
 
     def _bulk_insert_nested_data(self, parent_ids: List[str], field_name: str, data_list: List[Any], table_name: str):
         """
@@ -63,6 +99,9 @@ class DataInserter:
         # Thêm cột id và fk_id
         all_columns = ['id', 'fk_id'] + list(all_columns - {'id'})
 
+        # Kiểm tra và tạo bảng nếu chưa tồn tại
+        self._check_and_create_table(child_table, all_columns)
+
         # Xử lý dữ liệu và tạo câu lệnh bulk insert
         for parent_id, data in zip(parent_ids, data_list):
             if isinstance(data, list):
@@ -71,21 +110,47 @@ class DataInserter:
                         values = []
                         for col in all_columns:
                             if col == 'id':
-                                values.append(f"N'{str(uuid.uuid4())}'")
+                                # Ưu tiên sử dụng Id từ data nếu có
+                                item_id = item.get('Id') or item.get('id') or str(uuid.uuid4())
+                                values.append(f"N'{item_id}'")
                             elif col == 'fk_id':
                                 values.append(f"N'{parent_id}'")
                             else:
-                                values.append(self._prepare_value(item.get(col)))
+                                val = item.get(col)
+                                if val is None:
+                                    values.append('NULL')
+                                elif isinstance(val, (int, float)):
+                                    values.append(str(val))
+                                elif isinstance(val, bool):
+                                    values.append('1' if val else '0')
+                                elif isinstance(val, (dict, list)):
+                                    values.append(f"'{json.dumps(val, ensure_ascii=False)}'")
+                                else:
+                                    escaped_value = str(val).replace("'", "''")
+                                    values.append(f"N'{escaped_value}'")
                         all_values.append(f"({', '.join(values)})")
             elif isinstance(data, dict):
                 values = []
                 for col in all_columns:
                     if col == 'id':
-                        values.append(f"N'{str(uuid.uuid4())}'")
+                        # Ưu tiên sử dụng Id từ data nếu có
+                        item_id = data.get('Id') or data.get('id') or str(uuid.uuid4())
+                        values.append(f"N'{item_id}'")
                     elif col == 'fk_id':
                         values.append(f"N'{parent_id}'")
                     else:
-                        values.append(self._prepare_value(data.get(col)))
+                        val = data.get(col)
+                        if val is None:
+                            values.append('NULL')
+                        elif isinstance(val, (int, float)):
+                            values.append(str(val))
+                        elif isinstance(val, bool):
+                            values.append('1' if val else '0')
+                        elif isinstance(val, (dict, list)):
+                            values.append(f"'{json.dumps(val, ensure_ascii=False)}'")
+                        else:
+                            escaped_value = str(val).replace("'", "''")
+                            values.append(f"N'{escaped_value}'")
                 all_values.append(f"({', '.join(values)})")
 
         if all_values:
@@ -95,14 +160,17 @@ class DataInserter:
                     batch_size = 1000
                     for i in range(0, len(all_values), batch_size):
                         batch_values = all_values[i:i + batch_size]
+                        # Bọc tất cả tên cột trong dấu ngoặc vuông
+                        columns = [f"[{col}]" for col in all_columns]
                         query = f"""
-                        INSERT INTO {child_table} ({', '.join(all_columns)})
+                        INSERT INTO {child_table} ({', '.join(columns)})
                         VALUES {', '.join(batch_values)}
                         """
                         self.db_manager.cursor.execute(query)
                         self.db_manager.conn.commit()
             except Exception as e:
                 print(f"Lỗi khi thêm dữ liệu vào bảng con {child_table}: {str(e)}")
+                print(f"SQL Query: {query}")  # In ra câu lệnh SQL khi có lỗi
                 self.db_manager.conn.rollback()
 
     def insert_or_update_data(self, data: List[Dict[str, Any]], table_name: str):
@@ -135,14 +203,11 @@ class DataInserter:
 
                 regular_data_list.append(regular_data)
                 
-                # Lưu ID của record
-                if 'id' in regular_data:
-                    parent_ids.append(regular_data['id'])
-                else:
-                    # Tạo ID mới nếu không có
-                    new_id = str(uuid.uuid4())
-                    regular_data['id'] = new_id
-                    parent_ids.append(new_id)
+                # Lưu ID của record, ưu tiên sử dụng Id từ data
+                item_id = item.get('Id') or item.get('id') or str(uuid.uuid4())
+                if 'id' not in regular_data:
+                    regular_data['id'] = item_id
+                parent_ids.append(item_id)
 
                 # Thu thập dữ liệu lồng nhau
                 for field_name, nested_value in nested_data.items():
