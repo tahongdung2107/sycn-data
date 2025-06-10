@@ -46,8 +46,7 @@ class BillService:
         Chạy demo lấy hóa đơn và lưu vào database
         """
         # Lấy hóa đơn từ ngày 1-1-2025 đến hiện tại
-        # end_date = datetime.now()
-        end_date = datetime(2025, 1, 10)
+        end_date = datetime.now()
         start_date = datetime(2025, 1, 1)  # Ngày 1-1-2025
         
         result = self.get_bills(
@@ -61,15 +60,14 @@ class BillService:
             date_to_field='toDate',
             data_key='bill'
         )
-        print(result)
         
-        # if result and 'table' in result:
-        #     # Tạo bảng nếu chưa tồn tại
-        #     create_table(result['table'], self.table_name)
-        #     # Thêm/cập nhật dữ liệu
-        #     if 'data' in result and result['data']:
-        #         process_data(result['data'], self.table_name)
-        #     else:
-        #         print("Không có dữ liệu để xử lý")
-        # else:
-        #     print("Không tìm thấy cấu trúc bảng trong response")
+        if result and 'table' in result:
+            # Tạo bảng nếu chưa tồn tại
+            create_table(result['table'], self.table_name)
+            # Thêm/cập nhật dữ liệu
+            if 'data' in result and result['data']:
+                process_data(result['data'], self.table_name)
+            else:
+                print("Không có dữ liệu để xử lý")
+        else:
+            print("Không tìm thấy cấu trúc bảng trong response")

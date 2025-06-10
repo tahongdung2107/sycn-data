@@ -52,6 +52,14 @@ class NhanhAPIClient:
                 result = response.json()
                 if result.get('code') == 1:  # API Nhanh trả về code 1 khi thành công
                     data = result.get('data', {})
+                    
+                    # Xử lý đặc biệt cho /bill/search
+                    if path == '/bill/search' and isinstance(data, dict):
+                        for bill in data.values():
+                            if isinstance(bill, dict) and 'products' in bill and isinstance(bill['products'], dict):
+                                # Chuyển đổi products từ dict sang array
+                                bill['products'] = list(bill['products'].values())
+                    
                     # Nếu data là dictionary chứa các đơn hàng, chuyển thành list
                     if isinstance(data, dict) and data_key in data:
                         orders_dict = data[data_key]
@@ -92,10 +100,11 @@ class NhanhAPIClient:
         
         return self.get_all_data(path, query_params, step_days, items_per_page, date_from_field, date_to_field, data_key)
 
-    def _analyze_data_structure(self, data):
+    def _analyze_data_structure(self, data, path=None):
         """
         Phân tích cấu trúc dữ liệu và trả về thông tin về các trường
         :param data: Dữ liệu cần phân tích
+        :param path: Đường dẫn API (để xử lý đặc biệt cho một số API)
         :return: List các thông tin về trường
         """
         if not data or not isinstance(data, list) or len(data) == 0:
@@ -106,7 +115,7 @@ class NhanhAPIClient:
         table_info = []
         seen_fields = {}  # Dictionary để theo dõi các trường đã xuất hiện
         
-        def analyze_value(value):
+        def analyze_value(value, field_name=None):
             if isinstance(value, (int, float)):
                 return "number"
             elif isinstance(value, bool):
@@ -120,7 +129,7 @@ class NhanhAPIClient:
                     if isinstance(first_item, dict):
                         return {
                             "type": "array",
-                            "items": self._analyze_data_structure([first_item])
+                            "items": self._analyze_data_structure([first_item], path)
                         }
                     else:
                         return {
@@ -129,9 +138,17 @@ class NhanhAPIClient:
                         }
                 return "array"
             elif isinstance(value, dict):
+                # Xử lý đặc biệt cho trường products trong /bill/search
+                if path == '/bill/search' and field_name == 'products':
+                    # Lấy mẫu sản phẩm đầu tiên từ dictionary
+                    first_product = next(iter(value.values())) if value else {}
+                    return {
+                        "type": "array",
+                        "items": self._analyze_data_structure([first_product], path)
+                    }
                 return {
                     "type": "object",
-                    "properties": self._analyze_data_structure([value])
+                    "properties": self._analyze_data_structure([value], path)
                 }
             else:
                 return "unknown"
@@ -141,7 +158,7 @@ class NhanhAPIClient:
             if key in seen_fields:
                 continue
                 
-            type_info = analyze_value(value)
+            type_info = analyze_value(value, key)
             table_info.append({
                 "field": key,
                 "type": type_info
@@ -149,6 +166,45 @@ class NhanhAPIClient:
             seen_fields[key] = True  # Đánh dấu trường đã xuất hiện
             
         return table_info
+
+    def convert_final_data(self, data, path):
+        """
+        Chuyển đổi dữ liệu cuối cùng trước khi trả về
+        :param data: Dữ liệu cần chuyển đổi
+        :param path: Đường dẫn API
+        :return: Dữ liệu đã được chuyển đổi
+        """
+        if path == '/bill/search':
+            # Nếu data là dictionary chứa các bill, chuyển thành list
+            if isinstance(data, dict):
+                return list(data.values())
+        return data
+
+    def process_data(self, data, path):
+        """
+        Xử lý dữ liệu trước khi thêm vào all_data
+        :param data: Dữ liệu cần xử lý
+        :param path: Đường dẫn API
+        :return: Dữ liệu đã được xử lý
+        """
+        if path == '/bill/search':
+            if isinstance(data, dict):
+                # Nếu data là dictionary chứa các bill
+                processed_bills = []
+                for bill in data.values():
+                    if isinstance(bill, dict):
+                        # Chuyển đổi products từ dict sang array
+                        if 'products' in bill and isinstance(bill['products'], dict):
+                            bill['products'] = list(bill['products'].values())
+                        processed_bills.append(bill)
+                return processed_bills
+            elif isinstance(data, list):
+                # Nếu data là list các bill
+                for bill in data:
+                    if isinstance(bill, dict) and 'products' in bill and isinstance(bill['products'], dict):
+                        bill['products'] = list(bill['products'].values())
+                return data
+        return data
 
     def get_all_data(self, path, params=None, step_days=None, items_per_page=100, date_from_field='updatedDateTimeFrom', date_to_field='updatedDateTimeTo', data_key='orders'):
         """
@@ -204,13 +260,15 @@ class NhanhAPIClient:
                             print("Không có dữ liệu trong kết quả")
                             break
                             
-                        print(f"Đã nhận được {len(data)} items")
-                        all_data.extend(data)
-                        total_items += len(data)
+                        # Xử lý dữ liệu trước khi thêm vào all_data
+                        processed_data = self.process_data(data, path)
+                        print(f"Đã nhận được {len(processed_data)} items")
+                        all_data.extend(processed_data)
+                        total_items += len(processed_data)
                         print(f"Tổng số items đã thêm: {total_items}")
                         
                         # Kiểm tra nếu số lượng items nhận được ít hơn items_per_page
-                        if len(data) < items_per_page:
+                        if len(processed_data) < items_per_page:
                             print("Đã đến trang cuối của khoảng thời gian này")
                             break
                             
@@ -241,13 +299,15 @@ class NhanhAPIClient:
                         print("Không có dữ liệu trong kết quả")
                         break
                         
-                    print(f"Đã nhận được {len(data)} items")
-                    all_data.extend(data)
-                    total_items += len(data)
+                    # Xử lý dữ liệu trước khi thêm vào all_data
+                    processed_data = self.process_data(data, path)
+                    print(f"Đã nhận được {len(processed_data)} items")
+                    all_data.extend(processed_data)
+                    total_items += len(processed_data)
                     print(f"Tổng số items đã thêm: {total_items}")
                     
                     # Kiểm tra nếu số lượng items nhận được ít hơn items_per_page
-                    if len(data) < items_per_page:
+                    if len(processed_data) < items_per_page:
                         print("Đã đến trang cuối")
                         break
                         
@@ -274,23 +334,29 @@ class NhanhAPIClient:
                     print("Không có dữ liệu trong kết quả")
                     break
                     
-                print(f"Đã nhận được {len(data)} items")
-                all_data.extend(data)
-                total_items += len(data)
+                # Xử lý dữ liệu trước khi thêm vào all_data
+                processed_data = self.process_data(data, path)
+                print(f"Đã nhận được {len(processed_data)} items")
+                all_data.extend(processed_data)
+                total_items += len(processed_data)
                 print(f"Tổng số items đã thêm: {total_items}")
                 
                 # Kiểm tra nếu số lượng items nhận được ít hơn items_per_page
-                if len(data) < items_per_page:
+                if len(processed_data) < items_per_page:
                     print("Đã đến trang cuối")
                     break
                     
                 page += 1
             
         print(f"\nHoàn thành! Tổng số items đã lấy được: {total_items}")
+        
+        # Chuyển đổi dữ liệu cuối cùng
+        final_data = self.convert_final_data(all_data, path)
+        
         # Phân tích cấu trúc dữ liệu và tạo thông tin bảng
-        table_info = self._analyze_data_structure(all_data)
+        table_info = self._analyze_data_structure(final_data, path)
             
         return {
-            "data": all_data,
+            "data": final_data,
             "table": table_info
         }
