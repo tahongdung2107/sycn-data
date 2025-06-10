@@ -20,7 +20,7 @@ class NhanhAPIClient:
         :param page: Số trang
         :param items_per_page: Số item trên mỗi trang
         :param data_key: Tên key chứa dữ liệu trong response (mặc định là 'orders')
-        :return: Dữ liệu trả về dạng JSON
+        :return: Tuple (dữ liệu, tổng số trang)
         """
         try:
             url = f"{self.base_url}{path}"
@@ -52,6 +52,7 @@ class NhanhAPIClient:
                 result = response.json()
                 if result.get('code') == 1:  # API Nhanh trả về code 1 khi thành công
                     data = result.get('data', {})
+                    total_pages = data.get('totalPages', 1)  # Lấy tổng số trang
                     
                     # Xử lý đặc biệt cho /bill/search
                     if path == '/bill/search' and isinstance(data, dict):
@@ -64,18 +65,18 @@ class NhanhAPIClient:
                     if isinstance(data, dict) and data_key in data:
                         orders_dict = data[data_key]
                         if isinstance(orders_dict, dict):
-                            return list(orders_dict.values())
-                    return data
+                            return list(orders_dict.values()), total_pages
+                    return data, total_pages
                 else:
                     print(f"Lỗi API: {result.get('messages', 'Unknown error')}")
-                    return None
+                    return None, 0
             else:
                 print(f"Lỗi HTTP: {response.status_code}")
-                return None
+                return None, 0
                 
         except Exception as e:
             print(f"Lỗi khi gọi API: {str(e)}")
-            return None
+            return None, 0
 
     def get_data_by_date_range(self, path, start_date, end_date, params=None, step_days=None, items_per_page=100, date_from_field='updatedDateTimeFrom', date_to_field='updatedDateTimeTo', data_key='orders'):
         """
@@ -219,8 +220,36 @@ class NhanhAPIClient:
         :return: Dictionary chứa data và table
         """
         all_data = []
-        page = 1
         total_items = 0
+
+        def fetch_all_pages(current_params):
+            """Lấy dữ liệu từ tất cả các trang"""
+            page = 1
+            page_data = []
+            
+            # Lấy trang đầu tiên để biết tổng số trang
+            result, total_pages = self.fetch_data(path, current_params, page, items_per_page, data_key)
+            if not result:
+                return []
+                
+            # Xử lý dữ liệu trang đầu tiên
+            processed_data = self.process_data(result, path)
+            page_data.extend(processed_data)
+            print(f"Đã lấy trang {page}/{total_pages}")
+            
+            # Lấy các trang còn lại
+            for page in range(2, total_pages + 1):
+                print(f"Đang lấy trang {page}/{total_pages}...")
+                result, _ = self.fetch_data(path, current_params, page, items_per_page, data_key)
+                if not result:
+                    print(f"Không có dữ liệu ở trang {page}")
+                    continue
+                    
+                processed_data = self.process_data(result, path)
+                page_data.extend(processed_data)
+                print(f"Đã lấy được {len(page_data)} items")
+                
+            return page_data
 
         # Xử lý tham số thời gian
         if params and date_from_field in params and date_to_field in params:
@@ -241,112 +270,25 @@ class NhanhAPIClient:
                     current_params[date_to_field] = current_end.strftime('%Y-%m-%d')
                     
                     # Lấy dữ liệu cho khoảng thời gian này
-                    while True:
-                        print(f"Đang lấy dữ liệu trang {page}...")
-                        result = self.fetch_data(path, current_params, page, items_per_page, data_key)
-                        if not result:
-                            print("Không có dữ liệu trả về")
-                            break
-                            
-                        # Xử lý dữ liệu trả về
-                        if isinstance(result, list):
-                            data = result
-                        elif isinstance(result, dict):
-                            data = result.get(data_key, [])
-                        else:
-                            data = []
-                            
-                        if not data:
-                            print("Không có dữ liệu trong kết quả")
-                            break
-                            
-                        # Xử lý dữ liệu trước khi thêm vào all_data
-                        processed_data = self.process_data(data, path)
-                        print(f"Đã nhận được {len(processed_data)} items")
-                        all_data.extend(processed_data)
-                        total_items += len(processed_data)
-                        print(f"Tổng số items đã thêm: {total_items}")
-                        
-                        # Kiểm tra nếu số lượng items nhận được ít hơn items_per_page
-                        if len(processed_data) < items_per_page:
-                            print("Đã đến trang cuối của khoảng thời gian này")
-                            break
-                            
-                        page += 1
+                    page_data = fetch_all_pages(current_params)
+                    all_data.extend(page_data)
+                    total_items += len(page_data)
+                    print(f"Tổng số items đã thêm: {total_items}")
                     
                     # Cập nhật ngày bắt đầu cho lần lặp tiếp theo
                     current_start = current_end + timedelta(days=1)
-                    page = 1  # Reset page về 1 cho khoảng thời gian mới
             else:
                 # Không có step_days, lấy toàn bộ dữ liệu trong một lần
                 print(f"\nĐang lấy dữ liệu cho toàn bộ khoảng thời gian: {start_date.strftime('%Y-%m-%d')} đến {end_date.strftime('%Y-%m-%d')}")
-                while True:
-                    print(f"Đang lấy dữ liệu trang {page}...")
-                    result = self.fetch_data(path, params, page, items_per_page, data_key)
-                    if not result:
-                        print("Không có dữ liệu trả về")
-                        break
-                        
-                    # Xử lý dữ liệu trả về
-                    if isinstance(result, list):
-                        data = result
-                    elif isinstance(result, dict):
-                        data = result.get(data_key, [])
-                    else:
-                        data = []
-                        
-                    if not data:
-                        print("Không có dữ liệu trong kết quả")
-                        break
-                        
-                    # Xử lý dữ liệu trước khi thêm vào all_data
-                    processed_data = self.process_data(data, path)
-                    print(f"Đã nhận được {len(processed_data)} items")
-                    all_data.extend(processed_data)
-                    total_items += len(processed_data)
-                    print(f"Tổng số items đã thêm: {total_items}")
-                    
-                    # Kiểm tra nếu số lượng items nhận được ít hơn items_per_page
-                    if len(processed_data) < items_per_page:
-                        print("Đã đến trang cuối")
-                        break
-                        
-                    page += 1
+                page_data = fetch_all_pages(params)
+                all_data.extend(page_data)
+                total_items += len(page_data)
         else:
             # Không có tham số thời gian, lấy toàn bộ dữ liệu
             print("\nĐang lấy toàn bộ dữ liệu không có điều kiện thời gian")
-            while True:
-                print(f"Đang lấy dữ liệu trang {page}...")
-                result = self.fetch_data(path, params, page, items_per_page, data_key)
-                if not result:
-                    print("Không có dữ liệu trả về")
-                    break
-                    
-                # Xử lý dữ liệu trả về
-                if isinstance(result, list):
-                    data = result
-                elif isinstance(result, dict):
-                    data = result.get(data_key, [])
-                else:
-                    data = []
-                    
-                if not data:
-                    print("Không có dữ liệu trong kết quả")
-                    break
-                    
-                # Xử lý dữ liệu trước khi thêm vào all_data
-                processed_data = self.process_data(data, path)
-                print(f"Đã nhận được {len(processed_data)} items")
-                all_data.extend(processed_data)
-                total_items += len(processed_data)
-                print(f"Tổng số items đã thêm: {total_items}")
-                
-                # Kiểm tra nếu số lượng items nhận được ít hơn items_per_page
-                if len(processed_data) < items_per_page:
-                    print("Đã đến trang cuối")
-                    break
-                    
-                page += 1
+            page_data = fetch_all_pages(params)
+            all_data.extend(page_data)
+            total_items += len(page_data)
             
         print(f"\nHoàn thành! Tổng số items đã lấy được: {total_items}")
         
