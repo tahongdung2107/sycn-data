@@ -60,8 +60,6 @@ class DatabaseManager:
         except Exception as e:
             print(f"Error creating table: {str(e)}")
             return False
-        finally:
-            self.close()
 
     def insert_data(self, table_name, data):
         """

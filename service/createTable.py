@@ -14,16 +14,16 @@ def get_sql_type(field_type: Any) -> str:
         return 'NVARCHAR(255)'  # Default for unknown nested types
     
     type_mapping = {
-        'int': 'INT',
-        'number': 'DECIMAL(18,2)',
+        'int': 'NVARCHAR(50)',
+        'number': 'NVARCHAR(50)',
         'string': 'NVARCHAR(255)',
         'unknown': 'NVARCHAR(255)',
         'array': 'NVARCHAR(MAX)',
         'object': 'NVARCHAR(MAX)',
-        'datetime': 'DATETIME',
-        'date': 'DATE',
+        'datetime': 'NVARCHAR(50)',
+        'date': 'NVARCHAR(50)',
         'text': 'NVARCHAR(MAX)',
-        'boolean': 'BIT'
+        'boolean': 'NVARCHAR(10)'
     }
     return type_mapping.get(str(field_type).lower(), 'NVARCHAR(255)')
 
@@ -50,23 +50,14 @@ def create_child_table(db_manager: DatabaseManager, parent_table: str, field_nam
         else:
             # If items is a simple type, create a simple value column
             columns = {
-                'id': 'INT IDENTITY(1,1) PRIMARY KEY',
-                'fk_id': 'INT',
+                'id': 'NVARCHAR(50) PRIMARY KEY',
+                'fk_id': 'NVARCHAR(50)',
                 'value': get_sql_type(items)
             }
             try:
                 success = db_manager.create_table(child_table_name, columns)
                 if success:
                     print(f"Child table '{child_table_name}' created successfully!")
-                    if db_manager.connect():
-                        fk_sql = f"""
-                        ALTER TABLE {child_table_name}
-                        ADD CONSTRAINT FK_{child_table_name}_fk_id
-                        FOREIGN KEY (fk_id) REFERENCES {parent_table}(id)
-                        """
-                        db_manager.cursor.execute(fk_sql)
-                        db_manager.conn.commit()
-                        print(f"Foreign key constraint added to '{child_table_name}'")
                 return
             except Exception as e:
                 print(f"Error creating child table: {str(e)}")
@@ -76,8 +67,8 @@ def create_child_table(db_manager: DatabaseManager, parent_table: str, field_nam
 
     # Convert fields to columns dictionary
     columns = {
-        'id': 'INT IDENTITY(1,1) PRIMARY KEY',
-        'fk_id': 'INT'
+        'id': 'NVARCHAR(50) PRIMARY KEY',
+        'fk_id': 'NVARCHAR(50)'
     }
     
     for field in fields:
@@ -90,23 +81,37 @@ def create_child_table(db_manager: DatabaseManager, parent_table: str, field_nam
         success = db_manager.create_table(child_table_name, columns)
         if success:
             print(f"Child table '{child_table_name}' created successfully!")
-            
-            # Add foreign key constraint after table creation
-            if db_manager.connect():
-                fk_sql = f"""
-                ALTER TABLE {child_table_name}
-                ADD CONSTRAINT FK_{child_table_name}_fk_id
-                FOREIGN KEY (fk_id) REFERENCES {parent_table}(id)
-                """
-                db_manager.cursor.execute(fk_sql)
-                db_manager.conn.commit()
-                print(f"Foreign key constraint added to '{child_table_name}'")
         else:
             print(f"Failed to create child table '{child_table_name}'")
     except Exception as e:
         print(f"Error creating child table: {str(e)}")
-    finally:
-        db_manager.close()
+
+def check_column_exists(db_manager: DatabaseManager, table_name: str, column_name: str) -> bool:
+    """
+    Kiểm tra xem cột đã tồn tại trong bảng chưa
+    
+    Args:
+        db_manager: Database manager instance
+        table_name: Tên bảng
+        column_name: Tên cột cần kiểm tra
+    
+    Returns:
+        bool: True nếu cột tồn tại, False nếu không
+    """
+    try:
+        if db_manager.connect():
+            query = f"""
+            SELECT COUNT(*)
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_NAME = '{table_name}'
+            AND COLUMN_NAME = '{column_name}'
+            """
+            db_manager.cursor.execute(query)
+            result = db_manager.cursor.fetchone()
+            return result[0] > 0
+    except Exception as e:
+        print(f"Lỗi khi kiểm tra cột: {str(e)}")
+    return False
 
 def create_table(table_structure: List[Dict[str, Any]], table_name: str):
     """
@@ -130,7 +135,7 @@ def create_table(table_structure: List[Dict[str, Any]], table_name: str):
             
             # Add PRIMARY KEY constraint for 'id' field
             if field_name == 'id':
-                columns[field_name] = 'INT PRIMARY KEY'  # Force INT type for id
+                columns[field_name] = 'NVARCHAR(50) PRIMARY KEY'
             else:
                 columns[field_name] = get_sql_type(field_type)
                 
@@ -138,20 +143,45 @@ def create_table(table_structure: List[Dict[str, Any]], table_name: str):
                 if isinstance(field_type, dict) and field_type.get('type') in ['object', 'array']:
                     nested_fields.append((field_name, field_type))
 
-        # Create main table using database manager
-        success = db_manager.create_table(table_name, columns)
-        
-        if success:
-            print(f"Table '{table_name}' created successfully!")
+        # Kiểm tra xem bảng đã tồn tại chưa
+        if db_manager.connect():
+            check_table_query = f"""
+            SELECT COUNT(*)
+            FROM INFORMATION_SCHEMA.TABLES
+            WHERE TABLE_NAME = '{table_name}'
+            """
+            db_manager.cursor.execute(check_table_query)
+            table_exists = db_manager.cursor.fetchone()[0] > 0
+
+            if not table_exists:
+                # Tạo bảng mới nếu chưa tồn tại
+                success = db_manager.create_table(table_name, columns)
+                if success:
+                    print(f"Bảng '{table_name}' đã được tạo thành công!")
+                else:
+                    print(f"Không thể tạo bảng '{table_name}'")
+                    return
+            else:
+                # Thêm các cột mới vào bảng đã tồn tại
+                for column_name, column_type in columns.items():
+                    if not check_column_exists(db_manager, table_name, column_name):
+                        alter_query = f"""
+                        ALTER TABLE {table_name}
+                        ADD {column_name} {column_type}
+                        """
+                        try:
+                            db_manager.cursor.execute(alter_query)
+                            db_manager.conn.commit()
+                            print(f"Đã thêm cột '{column_name}' vào bảng '{table_name}'")
+                        except Exception as e:
+                            print(f"Lỗi khi thêm cột '{column_name}': {str(e)}")
             
             # Create child tables for nested fields
             for field_name, field_type in nested_fields:
                 create_child_table(db_manager, table_name, field_name, field_type)
-        else:
-            print(f"Failed to create table '{table_name}'")
 
     except Exception as e:
-        print(f"Error creating table: {str(e)}")
+        print(f"Lỗi khi tạo bảng: {str(e)}")
     finally:
         if 'db_manager' in locals():
             db_manager.close()

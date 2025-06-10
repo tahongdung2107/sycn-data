@@ -1,11 +1,12 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 from service.fetchData import NhanhAPIClient
 from service.createTable import create_table
-import json
+from service.insertUpdateData import process_order_data
 
 class OrderService:
     def __init__(self):
         self.api_client = NhanhAPIClient()
+        self.table_name = 'orders'  # Thêm tên bảng mặc định
 
     def get_orders(self, path, start_date, end_date, params=None, step_days=None, items_per_page=100, 
                   date_from_field='updatedDateTimeFrom', date_to_field='updatedDateTimeTo', data_key='orders'):
@@ -42,22 +43,18 @@ class OrderService:
 
     def run_demo(self):
         """
-        Chạy demo lấy đơn hàng và lưu vào file
+        Chạy demo lấy đơn hàng và lưu vào database
         """
         # Lấy đơn hàng từ ngày 1-1-2025 đến hiện tại
-        end_date = datetime(2025, 1, 1)
+        # end_date = datetime(2025, 1, 1)
+        end_date = datetime.now()
         start_date = datetime(2025, 1, 1)  # Ngày 1-1-2025
-        
-        # Tham số bổ sung
-        params = {
-            'status': 'pending'  # Ví dụ: lấy đơn hàng có trạng thái pending
-        }
         
         result = self.get_orders(
             path='/order/index',
             start_date=start_date,
             end_date=end_date,
-            params=params,
+            params={},
             step_days=9,
             items_per_page=100,
             date_from_field='updatedDateTimeFrom',
@@ -66,10 +63,15 @@ class OrderService:
         )
         
         if result and 'table' in result:
-            # print(result['table'])
-            create_table(result['table'], 'orders')
+            # Tạo bảng nếu chưa tồn tại
+            create_table(result['table'], self.table_name)
+            # Thêm/cập nhật dữ liệu
+            if 'data' in result and result['data']:
+                process_order_data(result['data'], self.table_name)
+            else:
+                print("Không có dữ liệu để xử lý")
         else:
-            print("No table structure found in the response")
+            print("Không tìm thấy cấu trúc bảng trong response")
 
 
     
