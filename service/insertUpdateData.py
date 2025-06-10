@@ -215,24 +215,53 @@ class DataInserter:
                         nested_data_dict[field_name] = []
                     nested_data_dict[field_name].append(nested_value)
 
-            # Thực hiện bulk insert cho dữ liệu thường
+            # Thực hiện bulk merge cho dữ liệu thường
             if regular_data_list:
                 columns = list(regular_data_list[0].keys())
                 values_list = self._prepare_bulk_values(regular_data_list, columns)
                 
                 try:
-                    # Chia nhỏ bulk insert thành các batch
+                    # Chia nhỏ bulk merge thành các batch
                     batch_size = 1000
                     for i in range(0, len(values_list), batch_size):
                         batch_values = values_list[i:i + batch_size]
-                        insert_query = f"""
-                        INSERT INTO {table_name} ({', '.join(columns)})
+                        
+                        # Tạo bảng tạm để chứa dữ liệu mới
+                        temp_table = f"#temp_{table_name}"
+                        create_temp_table_query = f"""
+                        CREATE TABLE {temp_table} (
+                            {', '.join([f'[{col}] NVARCHAR(MAX)' for col in columns])}
+                        )
+                        """
+                        self.db_manager.cursor.execute(create_temp_table_query)
+                        
+                        # Insert dữ liệu vào bảng tạm
+                        insert_temp_query = f"""
+                        INSERT INTO {temp_table} ({', '.join([f'[{col}]' for col in columns])})
                         VALUES {', '.join(batch_values)}
                         """
-                        self.db_manager.cursor.execute(insert_query)
+                        self.db_manager.cursor.execute(insert_temp_query)
+                        
+                        # Thực hiện MERGE
+                        merge_query = f"""
+                        MERGE {table_name} AS target
+                        USING {temp_table} AS source
+                        ON (target.id = source.id)
+                        WHEN MATCHED THEN
+                            UPDATE SET {', '.join([f'target.[{col}] = source.[{col}]' for col in columns if col != 'id'])}
+                        WHEN NOT MATCHED THEN
+                            INSERT ({', '.join([f'[{col}]' for col in columns])})
+                            VALUES ({', '.join([f'source.[{col}]' for col in columns])});
+                        """
+                        self.db_manager.cursor.execute(merge_query)
+                        
+                        # Xóa bảng tạm
+                        drop_temp_query = f"DROP TABLE {temp_table}"
+                        self.db_manager.cursor.execute(drop_temp_query)
+                        
                         self.db_manager.conn.commit()
                 except Exception as e:
-                    print(f"Lỗi khi thêm dữ liệu vào bảng {table_name}: {str(e)}")
+                    print(f"Lỗi khi thêm/cập nhật dữ liệu vào bảng {table_name}: {str(e)}")
                     self.db_manager.conn.rollback()
                     return
 
@@ -240,7 +269,7 @@ class DataInserter:
             for field_name, nested_data_list in nested_data_dict.items():
                 self._bulk_insert_nested_data(parent_ids, field_name, nested_data_list, table_name)
 
-            print(f"Đã thêm {len(regular_data_list)} bản ghi vào bảng {table_name}")
+            print(f"Đã thêm/cập nhật {len(regular_data_list)} bản ghi vào bảng {table_name}")
 
         except Exception as e:
             print(f"Lỗi khi thêm/cập nhật dữ liệu: {str(e)}")
