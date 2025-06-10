@@ -3,16 +3,16 @@ from service.fetchData import NhanhAPIClient
 from service.createTable import create_table
 from service.insertUpdateData import process_data
 
-class OrderService:
+class BillService:
     def __init__(self):
         self.api_client = NhanhAPIClient()
-        self.table_name = 'orders'  # Thêm tên bảng mặc định
+        self.table_name = 'bills'  # Tên bảng mặc định
 
-    def get_orders(self, path, start_date, end_date, params=None, step_days=None, items_per_page=100, 
-                  date_from_field='updatedDateTimeFrom', date_to_field='updatedDateTimeTo', data_key='orders'):
+    def get_bills(self, path, start_date, end_date, params=None, step_days=None, items_per_page=100, 
+                 date_from_field='fromDate', date_to_field='toDate', data_key='bills'):
         """
-        Lấy đơn hàng từ API Nhanh với các tham số tùy chỉnh
-        :param path: Đường dẫn API (ví dụ: /order/index)
+        Lấy hóa đơn từ API Nhanh với các tham số tùy chỉnh
+        :param path: Đường dẫn API (ví dụ: /bill/search)
         :param start_date: Ngày bắt đầu (datetime object hoặc string format: YYYY-MM-DD)
         :param end_date: Ngày kết thúc (datetime object hoặc string format: YYYY-MM-DD)
         :param params: Dictionary chứa các tham số bổ sung
@@ -20,8 +20,8 @@ class OrderService:
         :param items_per_page: Số item trên mỗi trang
         :param date_from_field: Tên trường ngày bắt đầu
         :param date_to_field: Tên trường ngày kết thúc
-        :param data_key: Tên key chứa dữ liệu trong response (mặc định là 'orders')
-        :return: List các đơn hàng
+        :param data_key: Tên key chứa dữ liệu trong response (mặc định là 'bills')
+        :return: List các hóa đơn
         """
         # Chuyển đổi ngày tháng sang định dạng chuỗi nếu là datetime object
         if isinstance(start_date, datetime):
@@ -43,35 +43,33 @@ class OrderService:
 
     def run_demo(self):
         """
-        Chạy demo lấy đơn hàng và lưu vào database
+        Chạy demo lấy hóa đơn và lưu vào database
         """
-        # Lấy đơn hàng từ ngày 1-1-2025 đến hiện tại
-        # end_date = datetime(2025, 1, 1)
-        end_date = datetime.now()
+        # Lấy hóa đơn từ ngày 1-1-2025 đến hiện tại
+        # end_date = datetime.now()
+        end_date = datetime(2025, 1, 10)
         start_date = datetime(2025, 1, 1)  # Ngày 1-1-2025
         
-        result = self.get_orders(
-            path='/order/index',
+        result = self.get_bills(
+            path='/bill/search',
             start_date=start_date,
             end_date=end_date,
             params={},
             step_days=9,
             items_per_page=100,
-            date_from_field='updatedDateTimeFrom',
-            date_to_field='updatedDateTimeTo',
-            data_key='orders'
+            date_from_field='fromDate',
+            date_to_field='toDate',
+            data_key='bill'
         )
+        print(result)
         
-        if result and 'table' in result:
-            # Tạo bảng nếu chưa tồn tại
-            create_table(result['table'], self.table_name)
-            # Thêm/cập nhật dữ liệu
-            if 'data' in result and result['data']:
-                process_data(result['data'], self.table_name)
-            else:
-                print("Không có dữ liệu để xử lý")
-        else:
-            print("Không tìm thấy cấu trúc bảng trong response")
-
-
-    
+        # if result and 'table' in result:
+        #     # Tạo bảng nếu chưa tồn tại
+        #     create_table(result['table'], self.table_name)
+        #     # Thêm/cập nhật dữ liệu
+        #     if 'data' in result and result['data']:
+        #         process_data(result['data'], self.table_name)
+        #     else:
+        #         print("Không có dữ liệu để xử lý")
+        # else:
+        #     print("Không tìm thấy cấu trúc bảng trong response")

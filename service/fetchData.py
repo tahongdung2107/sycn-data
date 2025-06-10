@@ -164,6 +164,7 @@ class NhanhAPIClient:
         """
         all_data = []
         page = 1
+        total_items = 0
 
         # Xử lý tham số thời gian
         if params and date_from_field in params and date_to_field in params:
@@ -176,6 +177,8 @@ class NhanhAPIClient:
                     # Tính ngày kết thúc cho khoảng thời gian hiện tại
                     current_end = min(current_start + timedelta(days=step_days), end_date)
                     
+                    print(f"\nĐang xử lý khoảng thời gian: {current_start.strftime('%Y-%m-%d')} đến {current_end.strftime('%Y-%m-%d')}")
+                    
                     # Cập nhật params với khoảng thời gian mới
                     current_params = params.copy()
                     current_params[date_from_field] = current_start.strftime('%Y-%m-%d')
@@ -183,8 +186,10 @@ class NhanhAPIClient:
                     
                     # Lấy dữ liệu cho khoảng thời gian này
                     while True:
+                        print(f"Đang lấy dữ liệu trang {page}...")
                         result = self.fetch_data(path, current_params, page, items_per_page, data_key)
                         if not result:
+                            print("Không có dữ liệu trả về")
                             break
                             
                         # Xử lý dữ liệu trả về
@@ -196,11 +201,17 @@ class NhanhAPIClient:
                             data = []
                             
                         if not data:
+                            print("Không có dữ liệu trong kết quả")
                             break
                             
+                        print(f"Đã nhận được {len(data)} items")
                         all_data.extend(data)
+                        total_items += len(data)
+                        print(f"Tổng số items đã thêm: {total_items}")
                         
+                        # Kiểm tra nếu số lượng items nhận được ít hơn items_per_page
                         if len(data) < items_per_page:
+                            print("Đã đến trang cuối của khoảng thời gian này")
                             break
                             
                         page += 1
@@ -210,9 +221,12 @@ class NhanhAPIClient:
                     page = 1  # Reset page về 1 cho khoảng thời gian mới
             else:
                 # Không có step_days, lấy toàn bộ dữ liệu trong một lần
+                print(f"\nĐang lấy dữ liệu cho toàn bộ khoảng thời gian: {start_date.strftime('%Y-%m-%d')} đến {end_date.strftime('%Y-%m-%d')}")
                 while True:
+                    print(f"Đang lấy dữ liệu trang {page}...")
                     result = self.fetch_data(path, params, page, items_per_page, data_key)
                     if not result:
+                        print("Không có dữ liệu trả về")
                         break
                         
                     # Xử lý dữ liệu trả về
@@ -224,19 +238,28 @@ class NhanhAPIClient:
                         data = []
                         
                     if not data:
+                        print("Không có dữ liệu trong kết quả")
                         break
                         
+                    print(f"Đã nhận được {len(data)} items")
                     all_data.extend(data)
+                    total_items += len(data)
+                    print(f"Tổng số items đã thêm: {total_items}")
                     
+                    # Kiểm tra nếu số lượng items nhận được ít hơn items_per_page
                     if len(data) < items_per_page:
+                        print("Đã đến trang cuối")
                         break
                         
                     page += 1
         else:
             # Không có tham số thời gian, lấy toàn bộ dữ liệu
+            print("\nĐang lấy toàn bộ dữ liệu không có điều kiện thời gian")
             while True:
+                print(f"Đang lấy dữ liệu trang {page}...")
                 result = self.fetch_data(path, params, page, items_per_page, data_key)
                 if not result:
+                    print("Không có dữ liệu trả về")
                     break
                     
                 # Xử lý dữ liệu trả về
@@ -248,15 +271,22 @@ class NhanhAPIClient:
                     data = []
                     
                 if not data:
+                    print("Không có dữ liệu trong kết quả")
                     break
                     
+                print(f"Đã nhận được {len(data)} items")
                 all_data.extend(data)
+                total_items += len(data)
+                print(f"Tổng số items đã thêm: {total_items}")
                 
+                # Kiểm tra nếu số lượng items nhận được ít hơn items_per_page
                 if len(data) < items_per_page:
+                    print("Đã đến trang cuối")
                     break
                     
                 page += 1
             
+        print(f"\nHoàn thành! Tổng số items đã lấy được: {total_items}")
         # Phân tích cấu trúc dữ liệu và tạo thông tin bảng
         table_info = self._analyze_data_structure(all_data)
             

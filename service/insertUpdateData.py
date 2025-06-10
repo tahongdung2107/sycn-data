@@ -249,7 +249,7 @@ class DataInserter:
         finally:
             self.db_manager.close()
 
-def process_order_data(data: List[Dict[str, Any]], table_name: str = 'orders'):
+def process_data(data: List[Dict[str, Any]], table_name: str = 'orders'):
     """
     Xử lý dữ liệu đơn hàng và thêm vào database
     
