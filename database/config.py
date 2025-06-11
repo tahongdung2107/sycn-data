@@ -1,6 +1,6 @@
 # # Database configuration
 DB_CONFIG = {
-    'server': 'DESKTOP-QIL2F02',
+    'server': 'DESKTOP-9MURA5K',
     'database': 'Nhanh',
     'username': 'sa',
     'password': 'admin'
