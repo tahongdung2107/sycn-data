@@ -7,14 +7,14 @@ import os
 import json
 import uuid
 import traceback
+from service.fetchData import NhanhAPIClient
+from service.createTable import create_table
+from service.productData import process_product_data, process_inventory_data, process_attribute_data, process_inventory_depot_data
 
 # Thêm đường dẫn thư mục gốc vào PYTHONPATH
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from database.manager import DatabaseManager
-from service.fetchData import NhanhAPIClient
-from service.createTable import create_table
-from service.productData import process_product_data, process_inventory_data, process_attribute_data
 
 # Cấu hình logging
 logging.basicConfig(level=logging.INFO)
@@ -52,7 +52,7 @@ class ProductService:
             "updated_at": "DATETIME DEFAULT GETDATE()"
         }
 
-        # Cấu trúc bảng inventory
+        # Cấu trúc bảng inventory (chỉ chứa tồn kho tổng)
         inventory_columns = {
             "id": "NVARCHAR(50) PRIMARY KEY",
             "fk_id": "NVARCHAR(50)",
@@ -64,7 +64,23 @@ class ProductService:
             "warranty_holding": "INT",
             "transfering": "INT",
             "available": "INT",
+            "created_at": "DATETIME DEFAULT GETDATE()",
+            "updated_at": "DATETIME DEFAULT GETDATE()"
+        }
+
+        # Cấu trúc bảng inventory_depot (chứa tồn kho theo kho)
+        inventory_depot_columns = {
+            "id": "NVARCHAR(50) PRIMARY KEY",
+            "fk_id": "NVARCHAR(50)",  # Liên kết với products.idNhanh
             "depot_id": "NVARCHAR(50)",
+            "remain": "INT",
+            "shipping": "INT",
+            "damaged": "INT",
+            "holding": "INT",
+            "warranty": "INT",
+            "warranty_holding": "INT",
+            "transfering": "INT",
+            "available": "INT",
             "created_at": "DATETIME DEFAULT GETDATE()",
             "updated_at": "DATETIME DEFAULT GETDATE()"
         }
@@ -89,6 +105,7 @@ class ProductService:
             # Xóa bảng cũ nếu tồn tại
             drop_tables_query = f"""
             IF OBJECT_ID('product_attributes', 'U') IS NOT NULL DROP TABLE product_attributes;
+            IF OBJECT_ID('product_inventory_depot', 'U') IS NOT NULL DROP TABLE product_inventory_depot;
             IF OBJECT_ID('product_inventory', 'U') IS NOT NULL DROP TABLE product_inventory;
             IF OBJECT_ID('{self.table_name}', 'U') IS NOT NULL DROP TABLE {self.table_name};
             """
@@ -103,11 +120,15 @@ class ProductService:
             if not self.db.create_table("product_inventory", inventory_columns):
                 raise Exception("Không thể tạo bảng product_inventory")
 
+            # Tạo bảng inventory_depot
+            if not self.db.create_table("product_inventory_depot", inventory_depot_columns):
+                raise Exception("Không thể tạo bảng product_inventory_depot")
+
             # Tạo bảng attributes
             if not self.db.create_table("product_attributes", attribute_columns):
                 raise Exception("Không thể tạo bảng product_attributes")
             
-            logger.info("Tạo bảng products, product_inventory và product_attributes thành công")
+            logger.info("Tạo bảng products, product_inventory, product_inventory_depot và product_attributes thành công")
             
         except Exception as e:
             logger.error(f"Lỗi khi tạo bảng: {str(e)}")
@@ -123,8 +144,6 @@ class ProductService:
         """
         Lấy dữ liệu sản phẩm từ API Nhanh.vn theo khoảng thời gian
         """
-        logger.info("=== BẮT ĐẦU GỌI API LẤY SẢN PHẨM ===")
-        
         # Nếu không có ngày bắt đầu và kết thúc, lấy tất cả sản phẩm
         if not start_date:
             start_date = datetime(2025, 1, 1)  # Ngày mặc định
@@ -136,15 +155,6 @@ class ProductService:
             start_date = start_date.strftime('%Y-%m-%d')
         if isinstance(end_date, datetime):
             end_date = end_date.strftime('%Y-%m-%d')
-
-        logger.info(f"Tham số API:")
-        logger.info(f"- start_date: {start_date}")
-        logger.info(f"- end_date: {end_date}")
-        logger.info(f"- step_days: {step_days}")
-        logger.info(f"- items_per_page: {items_per_page}")
-        logger.info(f"- date_from_field: {date_from_field}")
-        logger.info(f"- date_to_field: {date_to_field}")
-        logger.info(f"- data_key: {data_key}")
         
         try:
             result = self.api_client.get_data_by_date_range(
@@ -165,35 +175,17 @@ class ProductService:
                 
             # Kiểm tra kiểu dữ liệu trả về
             if isinstance(result, list):
-                logger.info(f"API trả về danh sách với {len(result)} sản phẩm")
                 # Chuyển đổi list thành dictionary với key là idNhanh
                 products_dict = {}
                 for product in result:
                     if isinstance(product, dict) and 'idNhanh' in product:
                         products_dict[str(product['idNhanh'])] = product
-                logger.info(f"Đã chuyển đổi thành dictionary với {len(products_dict)} sản phẩm")
                 return {'data': {'products': products_dict}}
             
-            # Xử lý trường hợp result là dictionary
-            logger.info(f"API Response code: {result.get('code', 'N/A')}")
-            if isinstance(result, dict) and 'data' in result:
-                data = result['data']
-                if isinstance(data, dict):
-                    logger.info(f"Tổng số trang: {data.get('totalPages', 'N/A')}")
-                    logger.info(f"Trang hiện tại: {data.get('currentPage', 'N/A')}")
-                    products = data.get('products', {})
-                    if isinstance(products, dict):
-                        logger.info(f"Số lượng sản phẩm trong response: {len(products)}")
-                        if products:
-                            first_product = next(iter(products.values()))
-                            logger.info(f"Mẫu sản phẩm đầu tiên: {json.dumps(first_product, indent=2)}")
-            
-            logger.info("=== KẾT THÚC GỌI API LẤY SẢN PHẨM ===")
             return result
             
         except Exception as e:
             logger.error(f"Lỗi khi gọi API: {str(e)}")
-            logger.error(f"Chi tiết lỗi: {traceback.format_exc()}")
             raise
 
     def sync_products(self, start_date: datetime = None, end_date: datetime = None,
@@ -223,7 +215,6 @@ class ProductService:
                 return
                 
             if data:
-                logger.info(f"Số lượng sản phẩm nhận được: {len(data)}")
                 # Chuyển đổi list thành dictionary với key là idNhanh
                 products_dict = {}
                 for product in data:
@@ -231,28 +222,15 @@ class ProductService:
                         products_dict[str(product['idNhanh'])] = product
                 
                 if products_dict:
-                    logger.info(f"Đã chuyển đổi thành dictionary với {len(products_dict)} sản phẩm")
                     # Xử lý dữ liệu trước khi lưu vào database
-                    processed_products, inventory_data, attribute_data = self.process_product_data(products_dict)
-                    
-             
+                    processed_products, inventory_data, inventory_depot_data, attribute_data = self.process_product_data(products_dict)
                     
                     if processed_products:
                         try:
-                            # Thêm/cập nhật dữ liệu sản phẩm
-                            logger.info("Bắt đầu lưu dữ liệu sản phẩm...")
                             process_product_data(processed_products)
-                            logger.info("Lưu dữ liệu sản phẩm thành công")
-                            
-                            # Thêm/cập nhật dữ liệu inventory
-                            logger.info("Bắt đầu lưu dữ liệu inventory...")
                             process_inventory_data(inventory_data)
-                            logger.info("Lưu dữ liệu inventory thành công")
-                            
-                            # Thêm/cập nhật dữ liệu attributes
-                            logger.info("Bắt đầu lưu dữ liệu attributes...")
+                            process_inventory_depot_data(inventory_depot_data)
                             process_attribute_data(attribute_data)
-                            logger.info("Lưu dữ liệu attributes thành công")
                         except Exception as e:
                             logger.error(f"Lỗi khi lưu dữ liệu: {str(e)}")
                             raise
@@ -265,17 +243,18 @@ class ProductService:
             logger.error(f"Lỗi khi đồng bộ sản phẩm: {str(e)}")
             raise
 
-    def process_product_data(self, products_data: Dict[str, Dict]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
+    def process_product_data(self, products_data: Dict[str, Dict]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
         """
         Xử lý dữ liệu sản phẩm trước khi lưu vào database
         
         Args:
             products_data: Dictionary chứa dữ liệu sản phẩm với key là idNhanh
         Returns:
-            Tuple chứa (processed_products, inventory_data, attribute_data)
+            Tuple chứa (processed_products, inventory_data, inventory_depot_data, attribute_data)
         """
         processed_products = []
         inventory_data = []
+        inventory_depot_data = []
         attribute_data = []
         
         for product_id, product in products_data.items():
@@ -346,7 +325,6 @@ class ProductService:
                     "warranty_holding": int(inventory.get("warrantyHolding", 0)),
                     "transfering": int(inventory.get("transfering", 0)),
                     "available": int(inventory.get("available", 0)),
-                    "depot_id": None,
                     "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 }
                 inventory_data.append(main_inventory)
@@ -356,8 +334,9 @@ class ProductService:
                 if isinstance(depots, dict):
                     for depot_id, depot_data in depots.items():
                         depot_inventory = {
-                            "id": f"INV_{uuid.uuid4().hex[:8]}",
+                            "id": f"INV_DEPOT_{uuid.uuid4().hex[:8]}",
                             "fk_id": str(product_id),
+                            "depot_id": str(depot_id),
                             "remain": int(depot_data.get("remain", 0)),
                             "shipping": int(depot_data.get("shipping", 0)),
                             "damaged": int(depot_data.get("damaged", 0)),
@@ -366,31 +345,24 @@ class ProductService:
                             "warranty_holding": int(depot_data.get("warrantyHolding", 0)),
                             "transfering": int(depot_data.get("transfering", 0)),
                             "available": int(depot_data.get("available", 0)),
-                            "depot_id": str(depot_id),
                             "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         }
-                        inventory_data.append(depot_inventory)
+                        inventory_depot_data.append(depot_inventory)
 
             except Exception as e:
                 logger.error(f"Lỗi khi xử lý sản phẩm {product_id}: {str(e)}")
                 continue
                 
-        return processed_products, inventory_data, attribute_data
+        return processed_products, inventory_data, inventory_depot_data, attribute_data
 
     def run_demo(self):
         """Chạy demo đồng bộ sản phẩm"""
         try:
-            logger.info("=== BẮT ĐẦU QUÁ TRÌNH ĐỒNG BỘ SẢN PHẨM ===")
-            
             # Lấy sản phẩm từ ngày 1-1-2025 đến hiện tại
-            end_date = datetime(2025, 3, 1)
+            end_date = datetime.now()
             start_date = datetime(2025, 1, 1)  # Ngày 1-1-2025
             
-            logger.info(f"Thời gian đồng bộ: từ {start_date} đến {end_date}")
-            logger.info(f"Step days: 9, Items per page: 100")
-            
             # Gọi API lấy dữ liệu
-            logger.info("Đang gọi API lấy dữ liệu sản phẩm...")
             result = self.get_products(
                 start_date=start_date,
                 end_date=end_date,
@@ -401,8 +373,6 @@ class ProductService:
             if not result:
                 logger.error("Không nhận được dữ liệu từ API")
                 return
-                
-            logger.info(f"API Response: {json.dumps(result, indent=2)}")
             
             # Tiếp tục với quá trình đồng bộ
             self.sync_products(
@@ -412,8 +382,6 @@ class ProductService:
                 items_per_page=100
             )
             
-            logger.info("=== KẾT THÚC QUÁ TRÌNH ĐỒNG BỘ SẢN PHẨM ===")
         except Exception as e:
             logger.error(f"Lỗi khi chạy demo: {str(e)}")
-            logger.error(f"Chi tiết lỗi: {traceback.format_exc()}")
             raise

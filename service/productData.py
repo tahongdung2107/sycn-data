@@ -2,12 +2,7 @@ from typing import List, Dict, Any
 from database.manager import DatabaseManager
 import json
 import uuid
-import logging
 from datetime import datetime
-
-# Cấu hình logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 class ProductDataInserter:
     def __init__(self):
@@ -45,19 +40,11 @@ class ProductDataInserter:
         return values_list
 
     def insert_or_update_products(self, data: List[Dict[str, Any]]):
-        """
-        Thêm hoặc cập nhật sản phẩm vào database
-        
-        Args:
-            data: List các dictionary chứa dữ liệu sản phẩm
-        """
         try:
             if not self.db.connect():
-                logger.error("Không thể kết nối đến database")
                 return
 
             if not data:
-                logger.warning("Không có dữ liệu để xử lý")
                 return
 
             # Đảm bảo mỗi sản phẩm có code
@@ -65,20 +52,17 @@ class ProductDataInserter:
                 if not item.get('code'):
                     item['code'] = f"PROD_{uuid.uuid4().hex[:8]}"
 
-            # Lấy danh sách cột từ dữ liệu đầu tiên
             columns = list(data[0].keys())
             values_list = self._prepare_bulk_values(data, columns)
             
             try:
-                # Chia nhỏ bulk merge thành các batch
                 batch_size = 1000
                 total_processed = 0
                 
                 for i in range(0, len(values_list), batch_size):
                     batch_values = values_list[i:i + batch_size]
-                    
-                    # Tạo bảng tạm để chứa dữ liệu mới
                     temp_table = f"#temp_{self.table_name}"
+                    
                     create_temp_table_query = f"""
                     CREATE TABLE {temp_table} (
                         {', '.join([f'[{col}] NVARCHAR(MAX)' for col in columns])}
@@ -86,14 +70,12 @@ class ProductDataInserter:
                     """
                     self.db.cursor.execute(create_temp_table_query)
                     
-                    # Insert dữ liệu vào bảng tạm
                     insert_temp_query = f"""
                     INSERT INTO {temp_table} ({', '.join([f'[{col}]' for col in columns])})
                     VALUES {', '.join(batch_values)}
                     """
                     self.db.cursor.execute(insert_temp_query)
                     
-                    # Thực hiện MERGE sử dụng code làm khóa
                     merge_query = f"""
                     MERGE {self.table_name} AS target
                     USING {temp_table} AS source
@@ -106,24 +88,17 @@ class ProductDataInserter:
                     """
                     self.db.cursor.execute(merge_query)
                     
-                    # Xóa bảng tạm
                     drop_temp_query = f"DROP TABLE {temp_table}"
                     self.db.cursor.execute(drop_temp_query)
                     
                     self.db.conn.commit()
                     total_processed += len(batch_values)
-                    logger.info(f"Đã xử lý {total_processed}/{len(values_list)} sản phẩm")
-
-                logger.info(f"Đã thêm/cập nhật thành công {total_processed} sản phẩm")
                 
             except Exception as e:
-                logger.error(f"Lỗi khi thêm/cập nhật sản phẩm: {str(e)}")
-                logger.error(f"SQL Query: {insert_temp_query}")
                 self.db.conn.rollback()
                 return
 
         except Exception as e:
-            logger.error(f"Lỗi khi xử lý dữ liệu sản phẩm: {str(e)}")
             if self.db.conn:
                 self.db.conn.rollback()
         finally:
@@ -162,35 +137,24 @@ class InventoryDataInserter:
         return values_list
 
     def insert_or_update_inventory(self, data: List[Dict[str, Any]]):
-        """
-        Thêm hoặc cập nhật dữ liệu inventory vào database
-        
-        Args:
-            data: List các dictionary chứa dữ liệu inventory
-        """
         try:
             if not self.db.connect():
-                logger.error("Không thể kết nối đến database")
                 return
 
             if not data:
-                logger.warning("Không có dữ liệu inventory để xử lý")
                 return
 
-            # Lấy danh sách cột từ dữ liệu đầu tiên
             columns = list(data[0].keys())
             values_list = self._prepare_bulk_values(data, columns)
             
             try:
-                # Chia nhỏ bulk merge thành các batch
                 batch_size = 1000
                 total_processed = 0
                 
                 for i in range(0, len(values_list), batch_size):
                     batch_values = values_list[i:i + batch_size]
-                    
-                    # Tạo bảng tạm để chứa dữ liệu mới
                     temp_table = f"#temp_{self.table_name}"
+                    
                     create_temp_table_query = f"""
                     CREATE TABLE {temp_table} (
                         {', '.join([f'[{col}] NVARCHAR(MAX)' for col in columns])}
@@ -198,14 +162,12 @@ class InventoryDataInserter:
                     """
                     self.db.cursor.execute(create_temp_table_query)
                     
-                    # Insert dữ liệu vào bảng tạm
                     insert_temp_query = f"""
                     INSERT INTO {temp_table} ({', '.join([f'[{col}]' for col in columns])})
                     VALUES {', '.join(batch_values)}
                     """
                     self.db.cursor.execute(insert_temp_query)
                     
-                    # Thực hiện MERGE sử dụng id làm khóa
                     merge_query = f"""
                     MERGE {self.table_name} AS target
                     USING {temp_table} AS source
@@ -218,24 +180,17 @@ class InventoryDataInserter:
                     """
                     self.db.cursor.execute(merge_query)
                     
-                    # Xóa bảng tạm
                     drop_temp_query = f"DROP TABLE {temp_table}"
                     self.db.cursor.execute(drop_temp_query)
                     
                     self.db.conn.commit()
                     total_processed += len(batch_values)
-                    logger.info(f"Đã xử lý {total_processed}/{len(values_list)} bản ghi inventory")
-
-                logger.info(f"Đã thêm/cập nhật thành công {total_processed} bản ghi inventory")
                 
             except Exception as e:
-                logger.error(f"Lỗi khi thêm/cập nhật inventory: {str(e)}")
-                logger.error(f"SQL Query: {insert_temp_query}")
                 self.db.conn.rollback()
                 return
 
         except Exception as e:
-            logger.error(f"Lỗi khi xử lý dữ liệu inventory: {str(e)}")
             if self.db.conn:
                 self.db.conn.rollback()
         finally:
@@ -283,7 +238,6 @@ class AttributeDataInserter:
             if not self.db.connect():
                 raise Exception("Không thể kết nối đến database")
 
-            # Tạo bảng tạm
             temp_table_query = f"""
             CREATE TABLE #temp_{self.table_name} (
                 id NVARCHAR(50),
@@ -298,13 +252,11 @@ class AttributeDataInserter:
             """
             self.db.cursor.execute(temp_table_query)
 
-            # Chia nhỏ dữ liệu để tránh quá tải
             batch_size = 1000
             for i in range(0, len(data_list), batch_size):
                 batch = data_list[i:i + batch_size]
                 values = self._prepare_bulk_values(batch)
                 
-                # Insert vào bảng tạm
                 insert_query = f"""
                 INSERT INTO #temp_{self.table_name} 
                 ([id], [fk_id], [attribute_id], [attribute_name], [name], [value], [display_order], [updated_at])
@@ -312,7 +264,6 @@ class AttributeDataInserter:
                 """
                 self.db.cursor.execute(insert_query)
 
-            # Merge dữ liệu từ bảng tạm vào bảng chính
             merge_query = f"""
             MERGE {self.table_name} AS target
             USING #temp_{self.table_name} AS source
@@ -335,9 +286,89 @@ class AttributeDataInserter:
             self.db.conn.commit()
 
         except Exception as e:
-            logger.error(f"Lỗi khi thêm/cập nhật attributes: {str(e)}")
-            logger.error(f"SQL Query:\n{merge_query}")
             raise
+        finally:
+            self.db.close()
+
+class InventoryDepotDataInserter:
+    def __init__(self):
+        self.db = DatabaseManager()
+        self.table_name = "product_inventory_depot"
+
+    def _prepare_value(self, value: Any) -> str:
+        if value is None:
+            return 'NULL'
+        elif isinstance(value, (dict, list)):
+            return f"N'{json.dumps(value, ensure_ascii=False)}'"
+        else:
+            escaped_value = str(value).replace("'", "''")
+            return f"N'{escaped_value}'"
+
+    def _prepare_bulk_values(self, items: List[Dict[str, Any]], columns: List[str]) -> List[str]:
+        values_list = []
+        for item in items:
+            values = []
+            for col in columns:
+                val = item.get(col)
+                values.append(self._prepare_value(val))
+            values_list.append(f"({', '.join(values)})")
+        return values_list
+
+    def insert_or_update_inventory_depot(self, data: List[Dict[str, Any]]):
+        try:
+            if not self.db.connect():
+                return
+
+            if not data:
+                return
+
+            columns = list(data[0].keys())
+            values_list = self._prepare_bulk_values(data, columns)
+            
+            try:
+                batch_size = 1000
+                total_processed = 0
+                
+                for i in range(0, len(values_list), batch_size):
+                    batch_values = values_list[i:i + batch_size]
+                    temp_table = f"#temp_{self.table_name}"
+                    
+                    create_temp_table_query = f"""
+                    CREATE TABLE {temp_table} (
+                        {', '.join([f'[{col}] NVARCHAR(MAX)' for col in columns])}
+                    )
+                    """
+                    self.db.cursor.execute(create_temp_table_query)
+                    
+                    insert_temp_query = f"""
+                    INSERT INTO {temp_table} ({', '.join([f'[{col}]' for col in columns])})
+                    VALUES {', '.join(batch_values)}
+                    """
+                    self.db.cursor.execute(insert_temp_query)
+                    
+                    merge_query = f"""
+                    MERGE {self.table_name} AS target
+                    USING {temp_table} AS source
+                    ON (target.id = source.id)
+                    WHEN MATCHED THEN
+                        UPDATE SET {', '.join([f'target.[{col}] = source.[{col}]' for col in columns if col != 'id'])}
+                    WHEN NOT MATCHED THEN
+                        INSERT ({', '.join([f'[{col}]' for col in columns])})
+                        VALUES ({', '.join([f'source.[{col}]' for col in columns])});
+                    """
+                    self.db.cursor.execute(merge_query)
+                    
+                    self.db.cursor.execute(f"DROP TABLE {temp_table}")
+                    self.db.conn.commit()
+                    total_processed += len(batch_values)
+                
+            except Exception as e:
+                self.db.conn.rollback()
+                return
+
+        except Exception as e:
+            if self.db.conn:
+                self.db.conn.rollback()
         finally:
             self.db.close()
 
@@ -349,7 +380,6 @@ def process_product_data(data: List[Dict[str, Any]]):
         data: List các dictionary chứa dữ liệu sản phẩm
     """
     if not data:
-        logger.warning("Không có dữ liệu sản phẩm để xử lý")
         return
 
     inserter = ProductDataInserter()
@@ -363,7 +393,6 @@ def process_inventory_data(data: List[Dict[str, Any]]):
         data: List các dictionary chứa dữ liệu inventory
     """
     if not data:
-        logger.warning("Không có dữ liệu inventory để xử lý")
         return
 
     inserter = InventoryDataInserter()
@@ -374,7 +403,13 @@ def process_attribute_data(data_list):
     try:
         inserter = AttributeDataInserter()
         inserter.insert_or_update_attributes(data_list)
-        logger.info(f"Xử lý {len(data_list)} bản ghi attributes thành công")
     except Exception as e:
-        logger.error(f"Lỗi khi xử lý dữ liệu attributes: {str(e)}")
-        raise 
+        raise
+
+def process_inventory_depot_data(data: List[Dict[str, Any]]):
+    """Xử lý và lưu dữ liệu inventory theo kho vào database"""
+    if not data:
+        return
+
+    inserter = InventoryDepotDataInserter()
+    inserter.insert_or_update_inventory_depot(data) 
