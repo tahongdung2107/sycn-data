@@ -3,6 +3,9 @@ from database.manager import DatabaseManager
 import json
 import uuid
 from datetime import datetime
+import logging
+
+logger = logging.getLogger(__name__)
 
 class ProductDataInserter:
     def __init__(self):
@@ -42,63 +45,104 @@ class ProductDataInserter:
     def insert_or_update_products(self, data: List[Dict[str, Any]]):
         try:
             if not self.db.connect():
+                logger.error("Không thể kết nối đến database")
                 return
 
             if not data:
                 return
 
-            # Đảm bảo mỗi sản phẩm có code
+            # Đếm số lượng sản phẩm trước khi xử lý
+            total_before = len(data)
+            logger.info(f"Bắt đầu xử lý {total_before} sản phẩm")
+
+            # Kiểm tra và lọc dữ liệu không hợp lệ
+            valid_data = []
+            invalid_data = []
             for item in data:
+                if not item.get('code') or item.get('code') == 'None':
+                    item['code'] = f"PROD_{uuid.uuid4().hex[:8]}"
+                if not item.get('idNhanh'):
+                    invalid_data.append(item)
+                    continue
+                valid_data.append(item)
+
+            if invalid_data:
+                logger.warning(f"Phát hiện {len(invalid_data)} sản phẩm không có idNhanh")
+
+            # Đảm bảo mỗi sản phẩm có code
+            for item in valid_data:
                 if not item.get('code'):
                     item['code'] = f"PROD_{uuid.uuid4().hex[:8]}"
 
-            columns = list(data[0].keys())
-            values_list = self._prepare_bulk_values(data, columns)
+            columns = list(valid_data[0].keys())
+            values_list = self._prepare_bulk_values(valid_data, columns)
             
             try:
                 batch_size = 1000
                 total_processed = 0
+                total_errors = 0
                 
                 for i in range(0, len(values_list), batch_size):
                     batch_values = values_list[i:i + batch_size]
                     temp_table = f"#temp_{self.table_name}"
                     
-                    create_temp_table_query = f"""
-                    CREATE TABLE {temp_table} (
-                        {', '.join([f'[{col}] NVARCHAR(MAX)' for col in columns])}
-                    )
-                    """
-                    self.db.cursor.execute(create_temp_table_query)
-                    
-                    insert_temp_query = f"""
-                    INSERT INTO {temp_table} ({', '.join([f'[{col}]' for col in columns])})
-                    VALUES {', '.join(batch_values)}
-                    """
-                    self.db.cursor.execute(insert_temp_query)
-                    
-                    merge_query = f"""
-                    MERGE {self.table_name} AS target
-                    USING {temp_table} AS source
-                    ON (target.code = source.code)
-                    WHEN MATCHED THEN
-                        UPDATE SET {', '.join([f'target.[{col}] = source.[{col}]' for col in columns if col != 'code'])}
-                    WHEN NOT MATCHED THEN
-                        INSERT ({', '.join([f'[{col}]' for col in columns])})
-                        VALUES ({', '.join([f'source.[{col}]' for col in columns])});
-                    """
-                    self.db.cursor.execute(merge_query)
-                    
-                    drop_temp_query = f"DROP TABLE {temp_table}"
-                    self.db.cursor.execute(drop_temp_query)
-                    
-                    self.db.conn.commit()
-                    total_processed += len(batch_values)
+                    try:
+                        create_temp_table_query = f"""
+                        CREATE TABLE {temp_table} (
+                            {', '.join([f'[{col}] NVARCHAR(MAX)' for col in columns])}
+                        )
+                        """
+                        self.db.cursor.execute(create_temp_table_query)
+                        
+                        insert_temp_query = f"""
+                        INSERT INTO {temp_table} ({', '.join([f'[{col}]' for col in columns])})
+                        VALUES {', '.join(batch_values)}
+                        """
+                        self.db.cursor.execute(insert_temp_query)
+                        
+                        merge_query = f"""
+                        MERGE {self.table_name} AS target
+                        USING {temp_table} AS source
+                        ON (target.code = source.code)
+                        WHEN MATCHED THEN
+                            UPDATE SET {', '.join([f'target.[{col}] = source.[{col}]' for col in columns if col != 'code'])}
+                        WHEN NOT MATCHED THEN
+                            INSERT ({', '.join([f'[{col}]' for col in columns])})
+                            VALUES ({', '.join([f'source.[{col}]' for col in columns])});
+                        """
+                        self.db.cursor.execute(merge_query)
+                        
+                        self.db.cursor.execute(f"DROP TABLE {temp_table}")
+                        self.db.conn.commit()
+                        
+                        total_processed += len(batch_values)
+                        logger.info(f"Đã xử lý thành công batch {i//batch_size + 1}: {len(batch_values)} sản phẩm")
+                        
+                    except Exception as e:
+                        total_errors += len(batch_values)
+                        logger.error(f"Lỗi khi xử lý batch {i//batch_size + 1}: {str(e)}")
+                        self.db.conn.rollback()
+                        continue
+
+                # Kiểm tra số lượng sản phẩm trong database
+                self.db.cursor.execute(f"SELECT COUNT(*) FROM {self.table_name}")
+                total_in_db = self.db.cursor.fetchone()[0]
+                
+                logger.info(f"Tổng kết:")
+                logger.info(f"- Số sản phẩm ban đầu: {total_before}")
+                logger.info(f"- Số sản phẩm hợp lệ: {len(valid_data)}")
+                logger.info(f"- Số sản phẩm không hợp lệ: {len(invalid_data)}")
+                logger.info(f"- Số sản phẩm xử lý thành công: {total_processed}")
+                logger.info(f"- Số sản phẩm lỗi: {total_errors}")
+                logger.info(f"- Số sản phẩm trong database: {total_in_db}")
                 
             except Exception as e:
+                logger.error(f"Lỗi khi thêm/cập nhật sản phẩm: {str(e)}")
                 self.db.conn.rollback()
                 return
 
         except Exception as e:
+            logger.error(f"Lỗi khi xử lý dữ liệu sản phẩm: {str(e)}")
             if self.db.conn:
                 self.db.conn.rollback()
         finally:
@@ -223,7 +267,8 @@ class AttributeDataInserter:
         values = []
         for item in data_list:
             row_values = []
-            for key in ["id", "fk_id", "attribute_id", "attribute_name", "name", "value", "display_order", "updated_at"]:
+            # Bỏ trường id vì nó sẽ tự động tăng
+            for key in ["fk_id", "attribute_id", "attribute_name", "name", "value", "display_order", "updated_at"]:
                 value = item.get(key)
                 row_values.append(self._prepare_value(value))
             values.append(f"({', '.join(row_values)})")
@@ -240,7 +285,6 @@ class AttributeDataInserter:
 
             temp_table_query = f"""
             CREATE TABLE #temp_{self.table_name} (
-                id NVARCHAR(50),
                 fk_id NVARCHAR(50),
                 attribute_id NVARCHAR(50),
                 attribute_name NVARCHAR(255),
@@ -259,7 +303,7 @@ class AttributeDataInserter:
                 
                 insert_query = f"""
                 INSERT INTO #temp_{self.table_name} 
-                ([id], [fk_id], [attribute_id], [attribute_name], [name], [value], [display_order], [updated_at])
+                ([fk_id], [attribute_id], [attribute_name], [name], [value], [display_order], [updated_at])
                 VALUES {', '.join(values)}
                 """
                 self.db.cursor.execute(insert_query)
@@ -267,19 +311,17 @@ class AttributeDataInserter:
             merge_query = f"""
             MERGE {self.table_name} AS target
             USING #temp_{self.table_name} AS source
-            ON target.id = source.id
+            ON (target.fk_id = source.fk_id AND target.attribute_id = source.attribute_id)
             WHEN MATCHED THEN
                 UPDATE SET 
-                    target.fk_id = source.fk_id,
-                    target.attribute_id = source.attribute_id,
                     target.attribute_name = source.attribute_name,
                     target.name = source.name,
                     target.value = source.value,
                     target.display_order = source.display_order,
                     target.updated_at = source.updated_at
             WHEN NOT MATCHED THEN
-                INSERT (id, fk_id, attribute_id, attribute_name, name, value, display_order, updated_at)
-                VALUES (source.id, source.fk_id, source.attribute_id, source.attribute_name, 
+                INSERT (fk_id, attribute_id, attribute_name, name, value, display_order, updated_at)
+                VALUES (source.fk_id, source.attribute_id, source.attribute_name, 
                         source.name, source.value, source.display_order, source.updated_at);
             """
             self.db.cursor.execute(merge_query)

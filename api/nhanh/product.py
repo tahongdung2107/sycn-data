@@ -87,7 +87,7 @@ class ProductService:
 
         # Cấu trúc bảng attributes
         attribute_columns = {
-            "id": "NVARCHAR(50) PRIMARY KEY",
+            "id": "INT IDENTITY(1,1) PRIMARY KEY",
             "fk_id": "NVARCHAR(50)",  # Liên kết với products.idNhanh
             "attribute_id": "NVARCHAR(50)",  # ID của thuộc tính (ví dụ: 86658)
             "attribute_name": "NVARCHAR(255)",  # Tên thuộc tính (ví dụ: Kích cỡ)
@@ -221,12 +221,33 @@ class ProductService:
                     if isinstance(product, dict) and 'idNhanh' in product:
                         products_dict[str(product['idNhanh'])] = product
                 
+                logger.info(f"Tổng số sản phẩm nhận được từ API: {len(data)}")
+                logger.info(f"Số sản phẩm sau khi chuyển đổi thành dictionary: {len(products_dict)}")
+                
                 if products_dict:
                     # Xử lý dữ liệu trước khi lưu vào database
                     processed_products, inventory_data, inventory_depot_data, attribute_data = self.process_product_data(products_dict)
                     
+                    logger.info(f"Số sản phẩm sau khi xử lý: {len(processed_products)}")
+                    logger.info(f"Số bản ghi inventory: {len(inventory_data)}")
+                    logger.info(f"Số bản ghi inventory_depot: {len(inventory_depot_data)}")
+                    logger.info(f"Số bản ghi attributes: {len(attribute_data)}")
+                    
                     if processed_products:
                         try:
+                            # Kiểm tra số lượng sản phẩm trùng lặp
+                            product_codes = set()
+                            duplicate_codes = set()
+                            for product in processed_products:
+                                code = product.get('code')
+                                if code in product_codes:
+                                    duplicate_codes.add(code)
+                                product_codes.add(code)
+                            
+                            if duplicate_codes:
+                                logger.warning(f"Phát hiện {len(duplicate_codes)} mã sản phẩm trùng lặp")
+                                logger.warning(f"Danh sách mã trùng: {list(duplicate_codes)[:10]}...")
+                            
                             process_product_data(processed_products)
                             process_inventory_data(inventory_data)
                             process_inventory_depot_data(inventory_depot_data)
@@ -289,7 +310,7 @@ class ProductService:
                 }
                 processed_products.append(processed_product)
 
-                # Xử lý attributes
+                # Xử lý attributes - Bỏ trường id vì sẽ tự động tăng
                 attributes = product.get("attributes", [])
                 if isinstance(attributes, list):
                     for attr_group in attributes:
@@ -297,7 +318,6 @@ class ProductService:
                             for attr_id, attr_data in attr_group.items():
                                 if isinstance(attr_data, dict):
                                     attribute = {
-                                        "id": f"ATTR_{uuid.uuid4().hex[:8]}",
                                         "fk_id": str(product_id),
                                         "attribute_id": str(attr_id),
                                         "attribute_name": str(attr_data.get("attributeName", "")),
