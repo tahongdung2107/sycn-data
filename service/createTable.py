@@ -27,6 +27,19 @@ def get_sql_type(field_type: Any) -> str:
     }
     return type_mapping.get(str(field_type).lower(), 'NVARCHAR(255)')
 
+def escape_column_name(column_name: str) -> str:
+    """
+    Escape column name if it's a SQL reserved keyword
+    """
+    reserved_keywords = {
+        'order', 'group', 'select', 'from', 'where', 'join', 'left', 'right', 'inner', 'outer',
+        'having', 'by', 'desc', 'asc', 'top', 'distinct', 'union', 'all', 'insert', 'update',
+        'delete', 'create', 'drop', 'alter', 'table', 'view', 'index', 'primary', 'foreign',
+        'key', 'references', 'constraint', 'default', 'check', 'unique', 'null', 'not', 'and',
+        'or', 'in', 'exists', 'between', 'like', 'is', 'as', 'on', 'using', 'natural', 'cross'
+    }
+    return f"[{column_name}]" if column_name.lower() in reserved_keywords else column_name
+
 def create_child_table(db_manager: DatabaseManager, parent_table: str, field_name: str, field_structure: Dict[str, Any]):
     """
     Create a child table for object or array fields
@@ -74,7 +87,7 @@ def create_child_table(db_manager: DatabaseManager, parent_table: str, field_nam
     for field in fields:
         field_name = field['field']
         field_type = field['type']
-        columns[field_name] = get_sql_type(field_type)
+        columns[escape_column_name(field_name)] = get_sql_type(field_type)
     
     try:
         # Create the child table
@@ -137,7 +150,7 @@ def create_table(table_structure: List[Dict[str, Any]], table_name: str):
             if field_name == 'id':
                 columns[field_name] = 'NVARCHAR(50) PRIMARY KEY'
             else:
-                columns[field_name] = get_sql_type(field_type)
+                columns[escape_column_name(field_name)] = get_sql_type(field_type)
                 
                 # Store nested fields for child table creation
                 if isinstance(field_type, dict) and field_type.get('type') in ['object', 'array']:
@@ -167,7 +180,7 @@ def create_table(table_structure: List[Dict[str, Any]], table_name: str):
                     if not check_column_exists(db_manager, table_name, column_name):
                         alter_query = f"""
                         ALTER TABLE {table_name}
-                        ADD {column_name} {column_type}
+                        ADD {escape_column_name(column_name)} {column_type}
                         """
                         try:
                             db_manager.cursor.execute(alter_query)
@@ -209,7 +222,7 @@ def create_table_from_array(table_name: str, fields_array: List[Dict[str, str]])
                 if field_name == 'id':
                     columns[field_name] = f"{sql_type} PRIMARY KEY"
                 else:
-                    columns[field_name] = sql_type
+                    columns[escape_column_name(field_name)] = sql_type
 
         # Create table using database manager
         success = db_manager.create_table(table_name, columns)
