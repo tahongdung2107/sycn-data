@@ -358,23 +358,11 @@ class ProductService:
     def run_demo(self):
         """Chạy demo đồng bộ sản phẩm"""
         try:
-            # Lấy sản phẩm từ ngày 1-1-2025 đến hiện tại
+            # Lấy sản phẩm từ ngày 1-1-2025 đến 1-3-2025
             end_date = datetime.now()
-            start_date = datetime(2025, 1, 1)  # Ngày 1-1-2025
+            start_date = datetime(2025, 1, 1)
             
-            # Gọi API lấy dữ liệu
-            result = self.get_products(
-                start_date=start_date,
-                end_date=end_date,
-                step_days=9,
-                items_per_page=100
-            )
-            
-            if not result:
-                logger.error("Không nhận được dữ liệu từ API")
-                return
-            
-            # Tiếp tục với quá trình đồng bộ
+            # Gọi API lấy dữ liệu và đồng bộ một lần duy nhất
             self.sync_products(
                 start_date=start_date,
                 end_date=end_date,
