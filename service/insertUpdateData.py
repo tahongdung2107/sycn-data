@@ -64,8 +64,8 @@ class DataInserter:
                 IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = '{table_name}')
                 BEGIN
                     CREATE TABLE {table_name} (
-                        id NVARCHAR(50) PRIMARY KEY,
-                        fk_id NVARCHAR(50),
+                        [id] NVARCHAR(50) PRIMARY KEY,
+                        [fk_id] NVARCHAR(50),
                         {', '.join([f'[{col}] NVARCHAR(MAX)' for col in columns if col not in ['id', 'fk_id']])}
                     )
                 END
