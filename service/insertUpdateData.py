@@ -87,6 +87,286 @@ class DataInserter:
         all_values = []
         all_columns = set()
 
+        # Xử lý đặc biệt cho bảng orders_tags
+        if child_table == 'orders_tags':
+            try:
+                if self.db_manager.connect():
+                    # Tạo bảng nếu chưa tồn tại
+                    create_table_query = f"""
+                    IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = '{child_table}')
+                    BEGIN
+                        CREATE TABLE {child_table} (
+                            [id] NVARCHAR(50) PRIMARY KEY,
+                            [fk_id] NVARCHAR(50),
+                            [tag] NVARCHAR(MAX)
+                        )
+                    END
+                    """
+                    self.db_manager.cursor.execute(create_table_query)
+                    self.db_manager.conn.commit()
+
+                    # Xử lý dữ liệu tags
+                    for parent_id, tags in zip(parent_ids, data_list):
+                        if isinstance(tags, list):
+                            for tag in tags:
+                                tag_id = str(uuid.uuid4())
+                                tag_value = str(tag)
+                                # Escape single quotes
+                                tag_value = tag_value.replace("'", "''")
+                                all_values.append(f"(N'{tag_id}', N'{parent_id}', N'{tag_value}')")
+
+                    # Chia nhỏ bulk insert thành các batch
+                    batch_size = 1000
+                    for i in range(0, len(all_values), batch_size):
+                        batch_values = all_values[i:i + batch_size]
+                        
+                        # Tạo bảng tạm
+                        temp_table = f"#temp_{child_table}"
+                        create_temp_table_query = f"""
+                        CREATE TABLE {temp_table} (
+                            [id] NVARCHAR(50),
+                            [fk_id] NVARCHAR(50),
+                            [tag] NVARCHAR(MAX)
+                        )
+                        """
+                        self.db_manager.cursor.execute(create_temp_table_query)
+                        
+                        # Insert vào bảng tạm
+                        insert_temp_query = f"""
+                        INSERT INTO {temp_table} ([id], [fk_id], [tag])
+                        VALUES {', '.join(batch_values)}
+                        """
+                        self.db_manager.cursor.execute(insert_temp_query)
+                        
+                        # Merge với bảng chính
+                        merge_query = f"""
+                        MERGE {child_table} AS target
+                        USING {temp_table} AS source
+                        ON (target.fk_id = source.fk_id AND target.tag = source.tag)
+                        WHEN NOT MATCHED THEN
+                            INSERT ([id], [fk_id], [tag])
+                            VALUES (source.[id], source.[fk_id], source.[tag]);
+                        """
+                        self.db_manager.cursor.execute(merge_query)
+                        
+                        # Xóa bảng tạm
+                        drop_temp_query = f"DROP TABLE {temp_table}"
+                        self.db_manager.cursor.execute(drop_temp_query)
+                        
+                        self.db_manager.conn.commit()
+            except Exception as e:
+                print(f"Lỗi khi thêm dữ liệu vào bảng con {child_table}: {str(e)}")
+                print(f"SQL Query: {merge_query if 'merge_query' in locals() else 'N/A'}")
+                self.db_manager.conn.rollback()
+            return
+
+        # Xử lý đặc biệt cho bảng bills_products
+        if child_table == 'bills_products':
+            try:
+                if self.db_manager.connect():
+                    # Thu thập tất cả các cột từ dữ liệu
+                    for data in data_list:
+                        if isinstance(data, list):
+                            for item in data:
+                                if isinstance(item, dict):
+                                    all_columns.update(item.keys())
+                        elif isinstance(data, dict):
+                            all_columns.update(data.keys())
+
+                    # Thêm cột id và fk_id
+                    all_columns = ['id', 'fk_id'] + list(all_columns - {'id'})
+
+                    # Tạo bảng nếu chưa tồn tại
+                    create_table_query = f"""
+                    IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = '{child_table}')
+                    BEGIN
+                        CREATE TABLE {child_table} (
+                            {', '.join([f'[{col}] NVARCHAR(MAX)' for col in all_columns])}
+                        )
+                    END
+                    """
+                    self.db_manager.cursor.execute(create_table_query)
+                    self.db_manager.conn.commit()
+
+                    # Xử lý dữ liệu và tạo câu lệnh bulk insert
+                    for parent_id, data in zip(parent_ids, data_list):
+                        if isinstance(data, list):
+                            for item in data:
+                                if isinstance(item, dict):
+                                    values = []
+                                    for col in all_columns:
+                                        if col == 'id':
+                                            item_id = item.get('Id') or item.get('id') or str(uuid.uuid4())
+                                            values.append(f"N'{item_id}'")
+                                        elif col == 'fk_id':
+                                            values.append(f"N'{parent_id}'")
+                                        else:
+                                            val = item.get(col)
+                                            if val is None:
+                                                values.append('NULL')
+                                            elif isinstance(val, (int, float)):
+                                                values.append(str(val))
+                                            elif isinstance(val, bool):
+                                                values.append('1' if val else '0')
+                                            elif isinstance(val, (dict, list)):
+                                                values.append(f"'{json.dumps(val, ensure_ascii=False)}'")
+                                            else:
+                                                escaped_value = str(val).replace("'", "''")
+                                                values.append(f"N'{escaped_value}'")
+                                    all_values.append(f"({', '.join(values)})")
+
+                    # Chia nhỏ bulk insert thành các batch
+                    batch_size = 1000
+                    for i in range(0, len(all_values), batch_size):
+                        batch_values = all_values[i:i + batch_size]
+                        
+                        # Tạo bảng tạm
+                        temp_table = f"#temp_{child_table}"
+                        create_temp_table_query = f"""
+                        CREATE TABLE {temp_table} (
+                            {', '.join([f'[{col}] NVARCHAR(MAX)' for col in all_columns])}
+                        )
+                        """
+                        self.db_manager.cursor.execute(create_temp_table_query)
+                        
+                        # Insert vào bảng tạm
+                        columns = [f"[{col}]" for col in all_columns]
+                        insert_temp_query = f"""
+                        INSERT INTO {temp_table} ({', '.join(columns)})
+                        VALUES {', '.join(batch_values)}
+                        """
+                        self.db_manager.cursor.execute(insert_temp_query)
+                        
+                        # Xóa dữ liệu cũ của các fk_id trong batch hiện tại
+                        delete_query = f"""
+                        DELETE t FROM {child_table} t
+                        INNER JOIN {temp_table} s ON t.fk_id = s.fk_id
+                        """
+                        self.db_manager.cursor.execute(delete_query)
+                        
+                        # Insert dữ liệu mới
+                        insert_query = f"""
+                        INSERT INTO {child_table} ({', '.join(columns)})
+                        SELECT {', '.join([f's.[{col}]' for col in all_columns])}
+                        FROM {temp_table} s
+                        """
+                        self.db_manager.cursor.execute(insert_query)
+                        
+                        # Xóa bảng tạm
+                        drop_temp_query = f"DROP TABLE {temp_table}"
+                        self.db_manager.cursor.execute(drop_temp_query)
+                        
+                        self.db_manager.conn.commit()
+            except Exception as e:
+                print(f"Lỗi khi thêm dữ liệu vào bảng con {child_table}: {str(e)}")
+                print(f"SQL Query: {insert_query if 'insert_query' in locals() else 'N/A'}")
+                self.db_manager.conn.rollback()
+            return
+
+        # Xử lý đặc biệt cho bảng orders_packed
+        if child_table == 'orders_packed':
+            try:
+                if self.db_manager.connect():
+                    # Thu thập tất cả các cột từ dữ liệu
+                    for data in data_list:
+                        if isinstance(data, list):
+                            for item in data:
+                                if isinstance(item, dict):
+                                    all_columns.update(item.keys())
+                        elif isinstance(data, dict):
+                            all_columns.update(data.keys())
+
+                    # Thêm cột id và fk_id
+                    all_columns = ['id', 'fk_id'] + list(all_columns - {'id'})
+
+                    # Tạo bảng nếu chưa tồn tại
+                    create_table_query = f"""
+                    IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = '{child_table}')
+                    BEGIN
+                        CREATE TABLE {child_table} (
+                            {', '.join([f'[{col}] NVARCHAR(MAX)' for col in all_columns])}
+                        )
+                    END
+                    """
+                    self.db_manager.cursor.execute(create_table_query)
+                    self.db_manager.conn.commit()
+
+                    # Xử lý dữ liệu và tạo câu lệnh bulk insert
+                    for parent_id, data in zip(parent_ids, data_list):
+                        if isinstance(data, list):
+                            for item in data:
+                                if isinstance(item, dict):
+                                    values = []
+                                    for col in all_columns:
+                                        if col == 'id':
+                                            item_id = item.get('Id') or item.get('id') or str(uuid.uuid4())
+                                            values.append(f"N'{item_id}'")
+                                        elif col == 'fk_id':
+                                            values.append(f"N'{parent_id}'")
+                                        else:
+                                            val = item.get(col)
+                                            if val is None:
+                                                values.append('NULL')
+                                            elif isinstance(val, (int, float)):
+                                                values.append(str(val))
+                                            elif isinstance(val, bool):
+                                                values.append('1' if val else '0')
+                                            elif isinstance(val, (dict, list)):
+                                                values.append(f"'{json.dumps(val, ensure_ascii=False)}'")
+                                            else:
+                                                escaped_value = str(val).replace("'", "''")
+                                                values.append(f"N'{escaped_value}'")
+                                    all_values.append(f"({', '.join(values)})")
+
+                    # Chia nhỏ bulk insert thành các batch
+                    batch_size = 1000
+                    for i in range(0, len(all_values), batch_size):
+                        batch_values = all_values[i:i + batch_size]
+                        
+                        # Tạo bảng tạm
+                        temp_table = f"#temp_{child_table}"
+                        create_temp_table_query = f"""
+                        CREATE TABLE {temp_table} (
+                            {', '.join([f'[{col}] NVARCHAR(MAX)' for col in all_columns])}
+                        )
+                        """
+                        self.db_manager.cursor.execute(create_temp_table_query)
+                        
+                        # Insert vào bảng tạm
+                        columns = [f"[{col}]" for col in all_columns]
+                        insert_temp_query = f"""
+                        INSERT INTO {temp_table} ({', '.join(columns)})
+                        VALUES {', '.join(batch_values)}
+                        """
+                        self.db_manager.cursor.execute(insert_temp_query)
+                        
+                        # Xóa dữ liệu cũ của các fk_id trong batch hiện tại
+                        delete_query = f"""
+                        DELETE t FROM {child_table} t
+                        INNER JOIN {temp_table} s ON t.fk_id = s.fk_id
+                        """
+                        self.db_manager.cursor.execute(delete_query)
+                        
+                        # Insert dữ liệu mới
+                        insert_query = f"""
+                        INSERT INTO {child_table} ({', '.join(columns)})
+                        SELECT {', '.join([f's.[{col}]' for col in all_columns])}
+                        FROM {temp_table} s
+                        """
+                        self.db_manager.cursor.execute(insert_query)
+                        
+                        # Xóa bảng tạm
+                        drop_temp_query = f"DROP TABLE {temp_table}"
+                        self.db_manager.cursor.execute(drop_temp_query)
+                        
+                        self.db_manager.conn.commit()
+            except Exception as e:
+                print(f"Lỗi khi thêm dữ liệu vào bảng con {child_table}: {str(e)}")
+                print(f"SQL Query: {insert_query if 'insert_query' in locals() else 'N/A'}")
+                self.db_manager.conn.rollback()
+            return
+
+        # Xử lý thông thường cho các bảng khác
         # Thu thập tất cả các cột từ dữ liệu
         for data in data_list:
             if isinstance(data, list):
@@ -162,15 +442,58 @@ class DataInserter:
                         batch_values = all_values[i:i + batch_size]
                         # Bọc tất cả tên cột trong dấu ngoặc vuông
                         columns = [f"[{col}]" for col in all_columns]
-                        query = f"""
-                        INSERT INTO {child_table} ({', '.join(columns)})
+                        
+                        # Tạo bảng tạm để chứa dữ liệu mới
+                        temp_table = f"#temp_{child_table}"
+                        create_temp_table_query = f"""
+                        CREATE TABLE {temp_table} (
+                            {', '.join([f'[{col}] NVARCHAR(MAX)' for col in all_columns])}
+                        )
+                        """
+                        self.db_manager.cursor.execute(create_temp_table_query)
+                        
+                        # Insert dữ liệu vào bảng tạm
+                        insert_temp_query = f"""
+                        INSERT INTO {temp_table} ({', '.join(columns)})
                         VALUES {', '.join(batch_values)}
                         """
-                        self.db_manager.cursor.execute(query)
+                        self.db_manager.cursor.execute(insert_temp_query)
+
+                        # Xử lý đặc biệt cho bảng orders_products
+                        if child_table == 'orders_products':
+                            merge_query = f"""
+                            MERGE {child_table} AS target
+                            USING {temp_table} AS source
+                            ON (target.fk_id = source.fk_id AND target.productId = source.productId)
+                            WHEN MATCHED THEN
+                                UPDATE SET {', '.join([f'target.[{col}] = source.[{col}]' for col in all_columns if col not in ['id', 'fk_id', 'productId']])}
+                            WHEN NOT MATCHED THEN
+                                INSERT ({', '.join(columns)})
+                                VALUES ({', '.join([f'source.[{col}]' for col in all_columns])});
+                            """
+                        else:
+                            # Xử lý thông thường cho các bảng khác
+                            merge_query = f"""
+                            MERGE {child_table} AS target
+                            USING {temp_table} AS source
+                            ON (target.id = source.id)
+                            WHEN MATCHED THEN
+                                UPDATE SET {', '.join([f'target.[{col}] = source.[{col}]' for col in all_columns if col != 'id'])}
+                            WHEN NOT MATCHED THEN
+                                INSERT ({', '.join(columns)})
+                                VALUES ({', '.join([f'source.[{col}]' for col in all_columns])});
+                            """
+                        
+                        self.db_manager.cursor.execute(merge_query)
+                        
+                        # Xóa bảng tạm
+                        drop_temp_query = f"DROP TABLE {temp_table}"
+                        self.db_manager.cursor.execute(drop_temp_query)
+                        
                         self.db_manager.conn.commit()
             except Exception as e:
                 print(f"Lỗi khi thêm dữ liệu vào bảng con {child_table}: {str(e)}")
-                print(f"SQL Query: {query}")  # In ra câu lệnh SQL khi có lỗi
+                print(f"SQL Query: {merge_query}")  # In ra câu lệnh SQL khi có lỗi
                 self.db_manager.conn.rollback()
 
     def insert_or_update_data(self, data: List[Dict[str, Any]], table_name: str):

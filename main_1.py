@@ -21,14 +21,14 @@ def main():
 
         # Chạy đồng bộ categories
         logger.info("Bắt đầu đồng bộ categories...")
-        product_service.run_demo()
+        # product_service.run_demo()
         # category_service.run_demo()
         logger.info("Đồng bộ categories hoàn tất!")
 
         # Chạy đồng bộ orders và bills
         logger.info("Bắt đầu đồng bộ orders và bills...")
         # order_service.run_demo()
-        # bill_service.run_demo()
+        bill_service.run_demo()
         logger.info("Đồng bộ orders và bills hoàn tất!")
 
     except Exception as e:

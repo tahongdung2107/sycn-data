@@ -49,6 +49,7 @@ class OrderService:
         # end_date = datetime(2025, 1, 1)
         end_date = datetime.now()
         start_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)  # Ngày 1-1-2025
+        # start_date = datetime(2024, 1, 1)
         
         result = self.get_orders(
             path='/order/index',

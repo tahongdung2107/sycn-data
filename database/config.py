@@ -1,6 +1,6 @@
 # # Database configuration
 # DB_CONFIG = {
-#     'server': 'DESKTOP-9MURA5K',
+#     'server': 'DESKTOP-QIL2F02',
 #     'database': 'Nhanh',
 #     'username': 'sa',
 #     'password': 'admin'
@@ -13,7 +13,6 @@
 # Trusted_Connection=yes;''' 
 
 
-# Database configuration
 DB_CONFIG = {
     'server': '14.231.214.225',
     'database': 'Nhanh',
