@@ -380,7 +380,7 @@ class ProductService:
         try:
             # Lấy sản phẩm từ ngày 1-1-2025 đến 1-3-2025
             end_date = datetime.now()
-            start_date = datetime(2025, 1, 1)
+            start_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
             
             # Gọi API lấy dữ liệu và đồng bộ một lần duy nhất
             self.sync_products(
