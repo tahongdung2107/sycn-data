@@ -46,7 +46,7 @@ class OrderService:
         Chạy demo lấy đơn hàng và lưu vào database
         """
         # Lấy đơn hàng từ ngày 1-1-2025 đến hiện tại
-        # end_date = datetime(2025, 1, 1)
+        # end_date = datetime(2025, 3, 1)
         end_date = datetime.now()
         start_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)  # Ngày 1-1-2025
         # start_date = datetime(2024, 1, 1)
@@ -63,16 +63,50 @@ class OrderService:
             data_key='orders'
         )
         
-        if result and 'table' in result:
+        if result and 'data' in result and result['data']:
+            # In ra chi tiết về dữ liệu đơn hàng
+            print("\nPhân tích dữ liệu đơn hàng:")
+            total_orders = len(result['data'])
+            orders_with_tags = sum(1 for order in result['data'] if order.get('tags'))
+            orders_with_packed = sum(1 for order in result['data'] if order.get('packed') and order['packed'].get('id'))
+            orders_with_facebook = sum(1 for order in result['data'] if order.get('facebook') and any(order['facebook'].values()))
+            
+            print(f"Tổng số đơn hàng: {total_orders}")
+            print(f"Số đơn hàng có tags: {orders_with_tags}")
+            print(f"Số đơn hàng có packed: {orders_with_packed}")
+            print(f"Số đơn hàng có facebook: {orders_with_facebook}")
+            
+            # In ra mẫu dữ liệu của một số đơn hàng có dữ liệu
+            print("\nMẫu dữ liệu đơn hàng có tags:")
+            for order in result['data']:
+                if order.get('tags'):
+                    print(f"Order ID: {order.get('id')}")
+                    print(f"Tags: {order['tags']}")
+                    break
+                    
+            print("\nMẫu dữ liệu đơn hàng có packed:")
+            for order in result['data']:
+                if order.get('packed') and order['packed'].get('id'):
+                    print(f"Order ID: {order.get('id')}")
+                    print(f"Packed: {order['packed']}")
+                    break
+                    
+            print("\nMẫu dữ liệu đơn hàng có facebook:")
+            for order in result['data']:
+                if order.get('facebook') and any(order['facebook'].values()):
+                    print(f"Order ID: {order.get('id')}")
+                    print(f"Facebook: {order['facebook']}")
+                    break
+            
             # Tạo bảng nếu chưa tồn tại
-            create_table(result['table'], self.table_name)
-            # Thêm/cập nhật dữ liệu
-            if 'data' in result and result['data']:
+            if 'table' in result:
+                create_table(result['table'], self.table_name)
+                # Thêm/cập nhật dữ liệu
                 process_data(result['data'], self.table_name)
             else:
-                print("Không có dữ liệu để xử lý")
+                print("Không tìm thấy cấu trúc bảng trong response")
         else:
-            print("Không tìm thấy cấu trúc bảng trong response")
+            print("Không có dữ liệu để xử lý")
 
 
     

@@ -87,8 +87,8 @@ class DataInserter:
         all_values = []
         all_columns = set()
 
-        # Xử lý đặc biệt cho bảng orders_tags
-        if child_table == 'orders_tags':
+        # Xử lý đặc biệt cho bảng orders_tags hoặc bills_tags
+        if child_table in ['orders_tags', 'bills_tags']:
             try:
                 if self.db_manager.connect():
                     # Tạo bảng nếu chưa tồn tại
@@ -105,13 +105,18 @@ class DataInserter:
                     self.db_manager.cursor.execute(create_table_query)
                     self.db_manager.conn.commit()
 
-                    # Xử lý dữ liệu tags
+                    # Xử lý dữ liệu tags (thêm cả trường hợp dict)
                     for parent_id, tags in zip(parent_ids, data_list):
                         if isinstance(tags, list):
                             for tag in tags:
                                 tag_id = str(uuid.uuid4())
                                 tag_value = str(tag)
-                                # Escape single quotes
+                                tag_value = tag_value.replace("'", "''")
+                                all_values.append(f"(N'{tag_id}', N'{parent_id}', N'{tag_value}')")
+                        elif isinstance(tags, dict):
+                            for tag in tags.values():
+                                tag_id = str(uuid.uuid4())
+                                tag_value = str(tag)
                                 tag_value = tag_value.replace("'", "''")
                                 all_values.append(f"(N'{tag_id}', N'{parent_id}', N'{tag_value}')")
 
@@ -609,9 +614,24 @@ def process_data(data: List[Dict[str, Any]], table_name: str = 'orders'):
         data: List các dictionary chứa dữ liệu đơn hàng
         table_name: Tên bảng để lưu dữ liệu (mặc định là 'orders')
     """
+    # Kiểm tra dữ liệu đầu vào giống order.py
     if not data:
+        print("Không có dữ liệu để xử lý")
+        return
+    if isinstance(data, dict):
+        if 'data' in data and data['data']:
+            data_to_process = data['data']
+        else:
+            print("Không có dữ liệu để xử lý")
+            return
+    elif isinstance(data, list):
+        if not data:
+            print("Không có dữ liệu để xử lý")
+            return
+        data_to_process = data
+    else:
         print("Không có dữ liệu để xử lý")
         return
 
     inserter = DataInserter()
-    inserter.insert_or_update_data(data, table_name)
+    inserter.insert_or_update_data(data_to_process, table_name)
