@@ -13,7 +13,7 @@
 
 
 DB_CONFIG = {
-    'server': '113.190.148.251',
+    'server': '14.177.129.7',
     'database': 'Nhanh',
     'username': 'dungth',
     'password': 'admin'
