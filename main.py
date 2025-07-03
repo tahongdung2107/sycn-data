@@ -84,14 +84,14 @@ def main():
         schedule.every(15).minutes.do(sync_orders_and_bills)
         
         # Lên lịch chạy job đồng bộ categories và products mỗi ngày lúc 01:00
-        schedule.every().day.at("8:00").do(sync_categories_and_products)
+        schedule.every().day.at("20:00").do(sync_categories_and_products)
 
         # Lên lịch chạy job xóa và reload orders, bills lúc 00:00 mỗi ngày
         schedule.every().day.at("00:00").do(sync_delete_and_reload_orders_bills)
 
         logger.info("Đã lên lịch các job đồng bộ!")
         logger.info("- Orders và Bills: Chạy mỗi 15 phút")
-        logger.info("- Categories và Products: Chạy mỗi ngày lúc 01:00")
+        logger.info("- Categories và Products: Chạy mỗi ngày lúc 20:00")
         logger.info("- Xóa và Reload Orders và Bills: Chạy mỗi ngày lúc 00:00")
 
         # Chạy vòng lặp vô hạn để thực thi các job đã lên lịch
