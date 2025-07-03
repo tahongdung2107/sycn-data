@@ -635,3 +635,28 @@ def process_data(data: List[Dict[str, Any]], table_name: str = 'orders'):
 
     inserter = DataInserter()
     inserter.insert_or_update_data(data_to_process, table_name)
+
+def delete_records_by_date(table_name: str, date_field: str, start_date: str, end_date: str):
+    """
+    Xóa các record trong bảng theo khoảng ngày
+    :param table_name: Tên bảng
+    :param date_field: Tên trường ngày tháng (createdDateTime, updatedDateTime, ...)
+    :param start_date: Ngày bắt đầu (YYYY-MM-DD)
+    :param end_date: Ngày kết thúc (YYYY-MM-DD)
+    """
+    db_manager = DatabaseManager()
+    try:
+        if db_manager.connect():
+            query = f"""
+            DELETE FROM {table_name}
+            WHERE {date_field} >= ? AND {date_field} < ?
+            """
+            db_manager.cursor.execute(query, (start_date, end_date))
+            db_manager.conn.commit()
+            print(f"Đã xóa các record trong bảng {table_name} từ {start_date} đến {end_date} theo trường {date_field}")
+    except Exception as e:
+        print(f"Lỗi khi xóa record trong bảng {table_name}: {str(e)}")
+        if db_manager.conn:
+            db_manager.conn.rollback()
+    finally:
+        db_manager.close()

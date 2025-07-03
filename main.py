@@ -6,6 +6,8 @@ import logging
 import schedule
 import time
 from datetime import datetime
+from service.insertUpdateData import delete_records_by_date
+import pandas as pd
 
 # Cấu hình logging
 logging.basicConfig(
@@ -38,6 +40,29 @@ def sync_categories_and_products():
     except Exception as e:
         logger.error(f"Lỗi khi đồng bộ categories và products: {str(e)}")
 
+def sync_delete_and_reload_orders_bills():
+    """Job xóa và reload orders, bills cho 2 tháng gần nhất lúc 00:00"""
+    try:
+        logger.info(f"Bắt đầu xóa và reload orders, bills lúc {datetime.now().strftime('%H:%M:%S')}...")
+        order_service = OrderService()
+        bill_service = BillService()
+        
+        # Tính ngày bắt đầu và kết thúc
+        end_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        start_date = (end_date.replace(day=1) - pd.DateOffset(months=1)).replace(day=1)  # Lùi về đầu tháng trước 2 tháng
+        start_date = start_date.to_pydatetime()
+        
+        # Xóa dữ liệu trong khoảng này
+        delete_records_by_date('orders', 'createdDateTime', start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
+        delete_records_by_date('bills', 'createdDateTime', start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
+        
+        # Đồng bộ lại dữ liệu
+        order_service.run_demo(start_date, end_date)
+        bill_service.run_demo(start_date, end_date)
+        logger.info("Đã xóa và reload orders, bills cho 2 tháng gần nhất!")
+    except Exception as e:
+        logger.error(f"Lỗi khi xóa và reload orders, bills: {str(e)}")
+
 def main():
     try:
         # Lên lịch chạy job đồng bộ orders và bills mỗi 15 phút
@@ -46,9 +71,13 @@ def main():
         # Lên lịch chạy job đồng bộ categories và products mỗi ngày lúc 01:00
         schedule.every().day.at("23:00").do(sync_categories_and_products)
 
+        # Lên lịch chạy job xóa và reload orders, bills lúc 00:00 mỗi ngày
+        schedule.every().day.at("00:00").do(sync_delete_and_reload_orders_bills)
+
         logger.info("Đã lên lịch các job đồng bộ!")
         logger.info("- Orders và Bills: Chạy mỗi 15 phút")
         logger.info("- Categories và Products: Chạy mỗi ngày lúc 01:00")
+        logger.info("- Xóa và Reload Orders và Bills: Chạy mỗi ngày lúc 00:00")
 
         # Chạy vòng lặp vô hạn để thực thi các job đã lên lịch
         while True:
