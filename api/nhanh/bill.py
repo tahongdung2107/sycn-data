@@ -47,6 +47,7 @@ class BillService:
         """
         if start_date is None:
             start_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            
         if end_date is None:
             end_date = datetime.now()
         result = self.get_bills(

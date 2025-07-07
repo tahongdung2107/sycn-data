@@ -20,11 +20,18 @@ logger = logging.getLogger(__name__)
 is_critical_job_running = False
 
 def sync_orders_and_bills():
-    """Job đồng bộ orders và bills mỗi 15 phút"""
+    """Job đồng bộ orders và bills mỗi 15 phút từ 05:00 đến 23:00"""
     global is_critical_job_running
     if is_critical_job_running:
         logger.info("Bỏ qua job đồng bộ orders và bills vì đang có job quan trọng chạy!")
         return
+    
+    # Kiểm tra thời gian hiện tại có trong khoảng 05:00-23:00 không
+    current_hour = datetime.now().hour
+    if current_hour < 5 or current_hour >= 23:
+        logger.info(f"Bỏ qua job đồng bộ orders và bills vì ngoài giờ hoạt động (hiện tại: {current_hour}:00)")
+        return
+        
     try:
         logger.info(f"Bắt đầu đồng bộ orders và bills lúc {datetime.now().strftime('%H:%M:%S')}...")
         order_service = OrderService()
@@ -84,13 +91,13 @@ def main():
         schedule.every(15).minutes.do(sync_orders_and_bills)
         
         # Lên lịch chạy job đồng bộ categories và products mỗi ngày lúc 01:00
-        schedule.every().day.at("20:00").do(sync_categories_and_products)
+        schedule.every().day.at("23:30").do(sync_categories_and_products)
 
         # Lên lịch chạy job xóa và reload orders, bills lúc 00:00 mỗi ngày
         schedule.every().day.at("00:00").do(sync_delete_and_reload_orders_bills)
 
         logger.info("Đã lên lịch các job đồng bộ!")
-        logger.info("- Orders và Bills: Chạy mỗi 15 phút")
+        logger.info("- Orders và Bills: Chạy mỗi 15 phút từ 05:00 đến 23:00")
         logger.info("- Categories và Products: Chạy mỗi ngày lúc 20:00")
         logger.info("- Xóa và Reload Orders và Bills: Chạy mỗi ngày lúc 00:00")
 
