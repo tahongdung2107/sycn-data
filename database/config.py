@@ -1,6 +1,6 @@
 # DB_CONFIG = {
 #     'server': 'DESKTOP-9MURA5K',
-#     'database': 'Nhanh',
+#     'database': 'Nhanh1',
 #     'username': 'sa',
 #     'password': 'admin'
 # }
