@@ -84,6 +84,36 @@ class DatabaseManager:
             print(f"Lỗi thêm dữ liệu: {str(e)}")
             return False
 
+    def update_data(self, table_name, data, where_conditions):
+        """
+        Cập nhật dữ liệu trong bảng
+        :param table_name: Tên bảng
+        :param data: Dictionary chứa dữ liệu cần cập nhật
+        :param where_conditions: Dictionary chứa điều kiện WHERE
+        Ví dụ: update_data('customers', {'name': 'New Name'}, {'id': 1})
+        """
+        try:
+            # Tạo phần SET
+            set_clause = ', '.join([f"{key} = ?" for key in data.keys()])
+            
+            # Tạo phần WHERE
+            where_clause = ' AND '.join([f"{key} = ?" for key in where_conditions.keys()])
+            
+            # Tạo query
+            query = f"UPDATE {table_name} SET {set_clause} WHERE {where_clause}"
+            
+            # Chuẩn bị values
+            values = list(data.values()) + list(where_conditions.values())
+            
+            cursor = self.conn.cursor()
+            cursor.execute(query, values)
+            self.conn.commit()
+            print(f"Đã cập nhật dữ liệu trong bảng {table_name} thành công!")
+            return True
+        except Exception as e:
+            print(f"Lỗi cập nhật dữ liệu: {str(e)}")
+            return False
+
     def close(self):
         """Đóng kết nối"""
         if self.cursor:

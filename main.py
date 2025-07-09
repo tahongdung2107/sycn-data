@@ -2,6 +2,7 @@ from api.nhanh.order import OrderService
 from api.nhanh.bill import BillService
 from api.nhanh.category import CategoryService
 from api.nhanh.product import ProductService
+from api.nhanh.customer import CustomerService
 import logging
 import schedule
 import time
@@ -36,8 +37,10 @@ def sync_orders_and_bills():
         logger.info(f"Bắt đầu đồng bộ orders và bills lúc {datetime.now().strftime('%H:%M:%S')}...")
         order_service = OrderService()
         bill_service = BillService()
+        customer_service = CustomerService()
         order_service.run_demo()
         bill_service.run_demo()
+        customer_service.run_demo()
         logger.info("Đồng bộ orders và bills hoàn tất!")
     except Exception as e:
         logger.error(f"Lỗi khi đồng bộ orders và bills: {str(e)}")
