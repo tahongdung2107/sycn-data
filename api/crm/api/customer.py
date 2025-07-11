@@ -53,21 +53,20 @@ def fetch_customer_data():
         print("Không thể lấy thông tin total từ API")
         return first_result
     
+    # total = first_result.get('total', 0)
     total = 10
     limit = 1000  # Số lượng record mỗi lần lấy
     all_data = []
     
     print(f"Tổng số customer cần lấy: {total}")
-    print(f"Số lượng mỗi batch: {limit}")
     
     # Tính số batch cần lấy
     total_batches = (total + limit - 1) // limit  # Làm tròn lên
-    print(f"Số batch cần lấy: {total_batches}")
     
     # Lấy từng batch
     for batch in range(total_batches):
         skip = batch * limit
-        print(f"\n=== Đang lấy batch {batch + 1}/{total_batches} (skip: {skip}) ===")
+        print(f"Đang lấy batch {batch + 1}/{total_batches} (skip: {skip})")
         
         data = {
             "table": "data_customer",
@@ -91,7 +90,6 @@ def fetch_customer_data():
         else:
             print(f"Lỗi khi lấy batch {batch + 1}")
     
-    print(f"\n=== Tổng kết ===")
     print(f"Đã lấy được tổng cộng: {len(all_data)} records")
     
     # Insert/update toàn bộ dữ liệu

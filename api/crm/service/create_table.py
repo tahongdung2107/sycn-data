@@ -47,26 +47,44 @@ def check_column_exists(db_manager: DatabaseManager, table_name: str, column_nam
             result = db_manager.cursor.fetchone()
             return result[0] > 0
     except Exception as e:
-        print(f"Lỗi khi kiểm tra cột: {str(e)}")
+        pass
     return False
 
 # Tạo bảng con cho object/array
 def create_child_table(db_manager: DatabaseManager, parent_table: str, field_name: str, sample_value: Any):
     child_table_name = f"{parent_table}_{field_name}"
     columns = {
-        'id': 'INT IDENTITY(1,1) PRIMARY KEY',
+        'id': 'NVARCHAR(255) PRIMARY KEY',
         'fk_id': 'NVARCHAR(255)'
     }
     
     # Xử lý sample_value để lấy cấu trúc cột
+    nested_fields_in_child = []  # Lưu các nested fields trong bảng con
+    
     if isinstance(sample_value, dict):
         for k, v in sample_value.items():
-            columns[escape_column_name(k)] = get_sql_type(v, k)
+            if isinstance(v, (dict, list)):
+                nested_fields_in_child.append((k, v))
+                # Thêm cột reference cho nested field trong bảng con
+                if isinstance(v, list):
+                    columns[escape_column_name(f"{k}_ids")] = 'NVARCHAR(MAX)'
+                else:
+                    columns[escape_column_name(f"{k}_id")] = 'NVARCHAR(255)'
+            else:
+                columns[escape_column_name(k)] = get_sql_type(v, k)
     elif isinstance(sample_value, list) and sample_value:
         first = sample_value[0]
         if isinstance(first, dict):
             for k, v in first.items():
-                columns[escape_column_name(k)] = get_sql_type(v, k)
+                if isinstance(v, (dict, list)):
+                    nested_fields_in_child.append((k, v))
+                    # Thêm cột reference cho nested field trong bảng con
+                    if isinstance(v, list):
+                        columns[escape_column_name(f"{k}_ids")] = 'NVARCHAR(MAX)'
+                    else:
+                        columns[escape_column_name(f"{k}_id")] = 'NVARCHAR(255)'
+                else:
+                    columns[escape_column_name(k)] = get_sql_type(v, k)
         else:
             columns['value'] = get_sql_type(first, field_name)
     else:
@@ -85,16 +103,18 @@ def create_child_table(db_manager: DatabaseManager, parent_table: str, field_nam
                 create_table_sql = f"CREATE TABLE {child_table_name} ({columns_str})"
                 db_manager.cursor.execute(create_table_sql)
                 db_manager.conn.commit()
-                print(f"  - Đã tạo bảng con: {child_table_name}")
             else:
                 for column_name, column_type in columns.items():
                     if not check_column_exists(db_manager, child_table_name, column_name):
                         alter_query = f"ALTER TABLE {child_table_name} ADD {column_name} {column_type}"
                         db_manager.cursor.execute(alter_query)
                         db_manager.conn.commit()
-                        print(f"  - Đã thêm cột '{column_name}' vào bảng con '{child_table_name}'")
+            
+            # Tạo bảng con cho nested fields trong bảng con này
+            for nested_field_name, nested_field_value in nested_fields_in_child:
+                create_child_table(db_manager, child_table_name, nested_field_name, nested_field_value)
     except Exception as e:
-        print(f"Lỗi khi tạo bảng con {child_table_name}: {str(e)}")
+        pass
 
 # Hàm đệ quy để tạo bảng con cho nested data nhiều level
 def create_nested_child_tables(db_manager: DatabaseManager, parent_table: str, data: Any):
@@ -133,6 +153,11 @@ def create_table_from_object(data: Dict[str, Any], table_name: str):
     for key, value in sample_data.items():
         if isinstance(value, (dict, list)):
             nested_fields.append((key, value))
+            # Thêm cột reference cho nested field
+            if isinstance(value, list):
+                columns[escape_column_name(f"{key}_ids")] = 'NVARCHAR(MAX)'  # Lưu danh sách ID
+            else:
+                columns[escape_column_name(f"{key}_id")] = 'NVARCHAR(255)'   # Lưu ID đơn
         else:
             columns[escape_column_name(key)] = get_sql_type(value, key)
     
@@ -158,15 +183,16 @@ def create_table_from_object(data: Dict[str, Any], table_name: str):
                         alter_query = f"ALTER TABLE {table_name} ADD {column_name} {column_type}"
                         db_manager.cursor.execute(alter_query)
                         db_manager.conn.commit()
-                        print(f"Đã thêm cột '{column_name}' vào bảng '{table_name}'")
     except Exception as e:
         print(f"Lỗi khi tạo bảng {table_name}: {e}")
     
     # Tạo bảng con cho nested fields và các nested data bên trong
+    child_tables_count = 0
     for field_name, field_value in nested_fields:
         create_child_table(db_manager, table_name, field_name, field_value)
         # Tạo bảng con cho nested data bên trong
         create_nested_child_tables(db_manager, f"{table_name}_{field_name}", field_value)
+        child_tables_count += 1
     
     db_manager.close()
-    print(f"Đã tạo thành công bảng {table_name} và các bảng con")
+    print(f"Đã tạo thành công bảng {table_name} và {child_tables_count} bảng con")

@@ -48,7 +48,6 @@ def insert_or_update_customer(result, table_name="crm_data_customer"):
             db.cursor.execute(query)
             return db.cursor.fetchone() is not None
         except Exception as e:
-            print(f"Lỗi kiểm tra cột {column} trong bảng {table}: {e}")
             return False
 
     def get_existing_columns(table_name):
@@ -57,7 +56,6 @@ def insert_or_update_customer(result, table_name="crm_data_customer"):
             db.cursor.execute(f"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{table_name}'")
             return set(row[0] for row in db.cursor.fetchall())
         except Exception as e:
-            print(f"Lỗi lấy danh sách cột bảng {table_name}: {e}")
             return set()
 
     def add_column_if_missing(table_name, column_name):
@@ -66,9 +64,8 @@ def insert_or_update_customer(result, table_name="crm_data_customer"):
             alter_sql = f"ALTER TABLE {table_name} ADD {escape_column_name(column_name)} NVARCHAR(MAX)"
             db.cursor.execute(alter_sql)
             db.conn.commit()
-            print(f"[AUTO] Đã thêm cột '{column_name}' vào bảng '{table_name}'")
         except Exception as e:
-            print(f"Lỗi khi thêm cột '{column_name}' vào bảng '{table_name}': {e}")
+            pass
 
     def ensure_columns_exist(table_name, data_dict):
         """Đảm bảo tất cả cột cần thiết đã tồn tại"""
@@ -84,7 +81,6 @@ def insert_or_update_customer(result, table_name="crm_data_customer"):
             db.cursor.execute(query)
             return db.cursor.fetchone() is not None
         except Exception as e:
-            print(f"Lỗi kiểm tra bảng {table_name}: {e}")
             return False
 
     def upsert_recursive(data, table_name, parent_id=None):
@@ -97,6 +93,7 @@ def insert_or_update_customer(result, table_name="crm_data_customer"):
         # Tách các trường đơn giản và các trường nested
         simple_fields = {}
         nested_fields = {}
+        nested_reference_ids = {}  # Lưu ID của các bảng nested để cập nhật vào bảng chính
         __id_value = None
         id_value = None
         
@@ -114,8 +111,12 @@ def insert_or_update_customer(result, table_name="crm_data_customer"):
                 continue
             elif isinstance(value, list) and value and isinstance(value[0], dict):
                 nested_fields[key] = value
+                # Thêm cột reference cho nested field
+                simple_fields[f"{key}_ids"] = None  # Sẽ được cập nhật sau
             elif isinstance(value, dict):
                 nested_fields[key] = [value]
+                # Thêm cột reference cho nested field
+                simple_fields[f"{key}_id"] = None  # Sẽ được cập nhật sau
             else:
                 simple_fields[key] = convert_value_for_sql(value)
 
@@ -123,24 +124,28 @@ def insert_or_update_customer(result, table_name="crm_data_customer"):
         if parent_id is not None:
             simple_fields['fk_id'] = parent_id
 
-        # Đảm bảo các cột đã tồn tại trong bảng
-        columns_to_check = simple_fields.copy()
-        if __id_value is not None:
-            columns_to_check['__id'] = __id_value
-        if id_value is not None:
-            columns_to_check['id'] = id_value
-        
-        ensure_columns_exist(table_name, columns_to_check)
+        # Đảm bảo các cột _ids và _id luôn có mặt trong simple_fields (dù không có nested data)
+        existing_cols = get_existing_columns(table_name)
+        for col in existing_cols:
+            if (col.endswith('_ids') or col.endswith('_id')) and col not in simple_fields:
+                simple_fields[col] = ""
 
+        # Đảm bảo các cột reference vật lý luôn tồn tại trước khi update
+        ensure_columns_exist(table_name, {k: v for k, v in simple_fields.items() if k.endswith('_ids') or k.endswith('_id')})
+        # Log nếu thiếu cột reference vật lý
+        for k in simple_fields:
+            if (k.endswith('_ids') or k.endswith('_id')) and k not in existing_cols:
+                print(f"[LOG][WARN] Đã thêm cột reference vật lý bị thiếu: {k} vào bảng {table_name}")
+
+        # Xử lý insert/update bảng chính hoặc bảng con để lấy record_id
+        record_id = None
         is_main_table = parent_id is None
         update_values = []
         set_clauses = []
-        record_id = None
 
         if is_main_table:
             # Bảng chính: kiểm tra theo __id hoặc id
             check_id = __id_value if __id_value is not None else id_value
-            
             if check_id is not None:
                 # Kiểm tra xem record đã tồn tại chưa dựa trên __id hoặc id
                 if __id_value is not None:
@@ -149,47 +154,33 @@ def insert_or_update_customer(result, table_name="crm_data_customer"):
                 else:
                     check_sql = f"SELECT id FROM {table_name} WHERE {escape_column_name('id')} = ?"
                     check_param = id_value
-                
                 db.cursor.execute(check_sql, (check_param,))
                 exist_row = db.cursor.fetchone()
-                
                 if exist_row:
                     # Đã tồn tại, update
-                    print(f"DEBUG: Record với {'__id' if __id_value else 'id'}={check_id} đã tồn tại, thực hiện UPDATE")
                     for k, v in simple_fields.items():
                         set_clauses.append(f"{escape_column_name(safe_field_name(k))} = ?")
                         update_values.append(v)
-                    
-                    # Kiểm tra xem có cột nào để update không
                     if set_clauses:
                         update_sql = f"UPDATE {table_name} SET {', '.join(set_clauses)} WHERE {escape_column_name('__id' if __id_value else 'id')} = ?"
                         db.cursor.execute(update_sql, update_values + [check_param])
                         db.conn.commit()
-                    else:
-                        print(f"DEBUG: Không có cột nào để update cho record với {'__id' if __id_value else 'id'}={check_id}")
-                    
-                    # Trả về id của record đã tồn tại
                     record_id = exist_row[0]
                 else:
                     # Chưa có, insert mới
-                    print(f"DEBUG: Record với {'__id' if __id_value else 'id'}={check_id} chưa tồn tại, thực hiện INSERT")
-                    # Thêm __id hoặc id vào dữ liệu để insert
                     if __id_value is not None:
                         simple_fields['__id'] = __id_value
                     if id_value is not None:
                         simple_fields['id'] = id_value
-                    
                     columns = [escape_column_name(safe_field_name(k)) for k in simple_fields.keys()]
                     placeholders = ['?' for _ in simple_fields]
                     values = list(simple_fields.values())
                     insert_sql = f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES ({', '.join(placeholders)})"
                     db.cursor.execute(insert_sql, values)
                     db.conn.commit()
-                    # Trả về id của record vừa insert
                     record_id = id_value if id_value is not None else __id_value
             else:
                 # Không có __id hoặc id, insert như cũ
-                print(f"DEBUG: Không có __id hoặc id, thực hiện INSERT mới")
                 if simple_fields:
                     columns = [escape_column_name(safe_field_name(k)) for k in simple_fields.keys()]
                     placeholders = ['?' for _ in simple_fields]
@@ -209,33 +200,23 @@ def insert_or_update_customer(result, table_name="crm_data_customer"):
         else:
             # Bảng con: kiểm tra theo fk_id và id từ response
             check_id = id_value if id_value is not None else None
-            
             if check_id is not None:
-                # Kiểm tra theo id từ response
                 check_sql = f"SELECT id FROM {table_name} WHERE {escape_column_name('id')} = ?"
                 db.cursor.execute(check_sql, (check_id,))
                 exist_row = db.cursor.fetchone()
                 if exist_row:
-                    # Đã tồn tại, update
-                    print(f"DEBUG: Bảng con record với id={check_id} đã tồn tại, thực hiện UPDATE")
                     for k, v in simple_fields.items():
                         if k != 'id':
                             set_clauses.append(f"{escape_column_name(safe_field_name(k))} = ?")
                             update_values.append(v)
-                    
-                    # Kiểm tra xem có cột nào để update không
                     if set_clauses:
                         update_sql = f"UPDATE {table_name} SET {', '.join(set_clauses)} WHERE {escape_column_name('id')} = ?"
                         db.cursor.execute(update_sql, update_values + [check_id])
                         db.conn.commit()
-                    else:
-                        print(f"DEBUG: Không có cột nào để update cho record với id={check_id}")
-                    
                     record_id = exist_row[0]
                 else:
-                    # Chưa có, insert mới với id từ response
-                    print(f"DEBUG: Bảng con record với id={check_id} chưa tồn tại, thực hiện INSERT")
-                    simple_fields['id'] = id_value
+                    if 'id' not in simple_fields or not simple_fields['id']:
+                        simple_fields['id'] = uuid.uuid4().hex
                     columns = [escape_column_name(safe_field_name(k)) for k in simple_fields.keys()]
                     placeholders = ['?' for _ in simple_fields]
                     values = list(simple_fields.values())
@@ -250,32 +231,24 @@ def insert_or_update_customer(result, table_name="crm_data_customer"):
                         except (ValueError, TypeError):
                             record_id = str(result[0])
                     else:
-                        record_id = None
+                        record_id = simple_fields['id']
             elif 'fk_id' in simple_fields:
-                # Fallback: kiểm tra theo fk_id nếu không có id từ response
                 check_sql = f"SELECT id FROM {table_name} WHERE {escape_column_name('fk_id')} = ?"
                 db.cursor.execute(check_sql, (simple_fields['fk_id'],))
                 exist_row = db.cursor.fetchone()
                 if exist_row:
-                    # Đã tồn tại, update
-                    print(f"DEBUG: Bảng con record với fk_id={simple_fields['fk_id']} đã tồn tại, thực hiện UPDATE")
                     for k, v in simple_fields.items():
                         if k != 'fk_id':
                             set_clauses.append(f"{escape_column_name(safe_field_name(k))} = ?")
                             update_values.append(v)
-                    
-                    # Kiểm tra xem có cột nào để update không
                     if set_clauses:
                         update_sql = f"UPDATE {table_name} SET {', '.join(set_clauses)} WHERE {escape_column_name('fk_id')} = ?"
                         db.cursor.execute(update_sql, update_values + [simple_fields['fk_id']])
                         db.conn.commit()
-                    else:
-                        print(f"DEBUG: Không có cột nào để update cho record với fk_id={simple_fields['fk_id']}")
-                    
                     record_id = exist_row[0]
                 else:
-                    # Chưa có, insert
-                    print(f"DEBUG: Bảng con record với fk_id={simple_fields['fk_id']} chưa tồn tại, thực hiện INSERT")
+                    if 'id' not in simple_fields or not simple_fields['id']:
+                        simple_fields['id'] = uuid.uuid4().hex
                     columns = [escape_column_name(safe_field_name(k)) for k in simple_fields.keys()]
                     placeholders = ['?' for _ in simple_fields]
                     values = list(simple_fields.values())
@@ -290,9 +263,10 @@ def insert_or_update_customer(result, table_name="crm_data_customer"):
                         except (ValueError, TypeError):
                             record_id = str(result[0])
                     else:
-                        record_id = None
+                        record_id = simple_fields['id']
             else:
-                # Không có fk_id, insert như cũ
+                if 'id' not in simple_fields or not simple_fields['id']:
+                    simple_fields['id'] = uuid.uuid4().hex
                 columns = [escape_column_name(safe_field_name(k)) for k in simple_fields.keys()]
                 placeholders = ['?' for _ in simple_fields]
                 values = list(simple_fields.values())
@@ -307,25 +281,67 @@ def insert_or_update_customer(result, table_name="crm_data_customer"):
                     except (ValueError, TypeError):
                         record_id = str(result[0])
                 else:
-                    record_id = None
+                    record_id = simple_fields['id']
+        
+        # Sau khi đã có record_id, mới xử lý nested fields
+        def log_nested(field_name, msg, record_id=None):
+            if record_id is not None:
+                print(f"[LOG] {msg} (field: {field_name}, customer id: {record_id})")
+            else:
+                print(f"[LOG] {msg} (field: {field_name})")
 
-        # Xử lý các trường nested (bảng con)
-        for field_name, nested_data in nested_fields.items():
-            if not nested_data:
-                continue
-            child_table_name = f"{table_name}_{field_name}"
-            if not check_table_exists(child_table_name):
-                print(f"DEBUG: Bảng con {child_table_name} không tồn tại, bỏ qua")
-                continue
-            print(f"DEBUG: Xử lý list {child_table_name}, số lượng: {len(nested_data)}")
-            for i, item in enumerate(nested_data):
-                print(f"DEBUG: Xử lý item {i} trong {child_table_name}")
-                # Truyền id của bảng cha (record_id) làm fk_id cho bảng con
-                child_id = upsert_recursive(item, child_table_name, record_id)
-                if child_id is None:
-                    print(f"DEBUG: Không thể insert/update vào {child_table_name} - có thể do lỗi SQL hoặc dữ liệu không hợp lệ")
+        if record_id is not None:
+            nested_ids_list = []  # Lưu danh sách ID của các bảng nested
+            for field_name, nested_data in nested_fields.items():
+                if not nested_data:
+                    log_nested(field_name, "Bỏ qua vì không có nested data", record_id)
+                    continue
+                child_table_name = f"{table_name}_{field_name}"
+                if not check_table_exists(child_table_name):
+                    log_nested(field_name, f"Bảng con '{child_table_name}' không tồn tại, bỏ qua", record_id)
+                    continue
+                field_ids = []  # Lưu ID của từng item trong nested field này
+                for i, item in enumerate(nested_data):
+                    # Truyền id của bảng cha (record_id) làm fk_id cho bảng con
+                    child_id = upsert_recursive(item, child_table_name, record_id)
+                    if child_id is not None:
+                        field_ids.append(str(child_id))
+                        log_nested(field_name, f"Đã insert bảng con '{child_table_name}', item {i}, id={child_id}, fk_id={record_id}", record_id)
+                    else:
+                        log_nested(field_name, f"[ERR] Không thể insert/update vào '{child_table_name}', item {i}, fk_id={record_id}", record_id)
+                # Lưu danh sách ID của field này
+                # Nếu nested là list thì field_name_ids, nếu là dict thì field_name_id
+                if isinstance(nested_data, list):
+                    ref_col = f"{field_name}_ids"
                 else:
-                    print(f"DEBUG: Đã xử lý thành công item {i} trong {child_table_name} với ID: {child_id}")
+                    ref_col = f"{field_name}_id"
+                if field_ids:
+                    nested_ids_list.append((ref_col, ','.join(field_ids)))
+                    # Gán vào simple_fields để update lại bảng chính
+                    simple_fields[ref_col] = ','.join(field_ids)
+                    log_nested(field_name, f"Đã chuẩn bị reference cho '{ref_col}': {field_ids}", record_id)
+                else:
+                    log_nested(field_name, f"[WARN] Không có id nào cho field '{ref_col}'", record_id)
+
+            # Đảm bảo lại các cột reference vật lý sau khi xử lý nested
+            ensure_columns_exist(table_name, {k: v for k, v in simple_fields.items() if k.endswith('_ids') or k.endswith('_id')})
+
+            # Update lại toàn bộ simple_fields (bao gồm reference ids) vào bảng hiện tại
+            if len(simple_fields) > 0:
+                try:
+                    update_clauses = []
+                    update_values = []
+                    for k, v in simple_fields.items():
+                        if k not in ['id', '__id']:
+                            update_clauses.append(f"{escape_column_name(safe_field_name(k))} = ?")
+                            update_values.append(v)
+                    if update_clauses:
+                        update_sql = f"UPDATE {table_name} SET {', '.join(update_clauses)} WHERE {escape_column_name('id')} = ?"
+                        db.cursor.execute(update_sql, update_values + [record_id])
+                        db.conn.commit()
+                        print(f"[LOG] Đã update bảng '{table_name}' id={record_id} với các trường: {list(simple_fields.keys())}")
+                except Exception as e:
+                    print(f"[LOG][ERR] Lỗi khi update bảng '{table_name}' id={record_id}: {e}")
         
         return record_id
 
@@ -353,21 +369,18 @@ def insert_or_update_customer(result, table_name="crm_data_customer"):
 
     try:
         # Xử lý từng customer
+        processed_count = 0
         for i, customer_data in enumerate(data_list, 1):
-            print(f"\n=== Xử lý customer {i} ===")
-            
             # Insert/update customer chính
             customer_id = upsert_recursive(customer_data, table_name)
             
             if customer_id:
-                print(f"DEBUG: Customer {i} processed successfully with ID: {customer_id}")
                 # Xử lý nested data nhiều level
                 process_nested_data_recursive(customer_data, table_name, customer_id)
-            else:
-                print(f"DEBUG: Failed to process customer {i}")
+                processed_count += 1
 
         db.conn.commit()
-        print(f"\nĐã xử lý xong {len(data_list)} customer")
+        print(f"Đã xử lý thành công {processed_count}/{len(data_list)} customer")
 
     except Exception as e:
         print(f"Lỗi trong quá trình insert/update: {e}")
