@@ -130,10 +130,13 @@ def insert_or_update_customer(result, table_name="crm_data_customer"):
             if (col.endswith('_ids') or col.endswith('_id')) and col not in simple_fields:
                 simple_fields[col] = ""
 
+        # LỌC simple_fields chỉ giữ các trường đã tồn tại vật lý
+        filtered_simple_fields = {k: v for k, v in simple_fields.items() if k in existing_cols}
+
         # Đảm bảo các cột reference vật lý luôn tồn tại trước khi update
-        ensure_columns_exist(table_name, {k: v for k, v in simple_fields.items() if k.endswith('_ids') or k.endswith('_id')})
+        ensure_columns_exist(table_name, {k: v for k, v in filtered_simple_fields.items() if k.endswith('_ids') or k.endswith('_id')})
         # Log nếu thiếu cột reference vật lý
-        for k in simple_fields:
+        for k in filtered_simple_fields:
             if (k.endswith('_ids') or k.endswith('_id')) and k not in existing_cols:
                 print(f"[LOG][WARN] Đã thêm cột reference vật lý bị thiếu: {k} vào bảng {table_name}")
 
@@ -158,7 +161,7 @@ def insert_or_update_customer(result, table_name="crm_data_customer"):
                 exist_row = db.cursor.fetchone()
                 if exist_row:
                     # Đã tồn tại, update
-                    for k, v in simple_fields.items():
+                    for k, v in filtered_simple_fields.items():
                         set_clauses.append(f"{escape_column_name(safe_field_name(k))} = ?")
                         update_values.append(v)
                     if set_clauses:
@@ -169,22 +172,22 @@ def insert_or_update_customer(result, table_name="crm_data_customer"):
                 else:
                     # Chưa có, insert mới
                     if __id_value is not None:
-                        simple_fields['__id'] = __id_value
+                        filtered_simple_fields['__id'] = __id_value
                     if id_value is not None:
-                        simple_fields['id'] = id_value
-                    columns = [escape_column_name(safe_field_name(k)) for k in simple_fields.keys()]
-                    placeholders = ['?' for _ in simple_fields]
-                    values = list(simple_fields.values())
+                        filtered_simple_fields['id'] = id_value
+                    columns = [escape_column_name(safe_field_name(k)) for k in filtered_simple_fields.keys()]
+                    placeholders = ['?' for _ in filtered_simple_fields]
+                    values = list(filtered_simple_fields.values())
                     insert_sql = f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES ({', '.join(placeholders)})"
                     db.cursor.execute(insert_sql, values)
                     db.conn.commit()
                     record_id = id_value if id_value is not None else __id_value
             else:
                 # Không có __id hoặc id, insert như cũ
-                if simple_fields:
-                    columns = [escape_column_name(safe_field_name(k)) for k in simple_fields.keys()]
-                    placeholders = ['?' for _ in simple_fields]
-                    values = list(simple_fields.values())
+                if filtered_simple_fields:
+                    columns = [escape_column_name(safe_field_name(k)) for k in filtered_simple_fields.keys()]
+                    placeholders = ['?' for _ in filtered_simple_fields]
+                    values = list(filtered_simple_fields.values())
                     insert_sql = f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES ({', '.join(placeholders)})"
                     db.cursor.execute(insert_sql, values)
                     db.conn.commit()
@@ -205,7 +208,7 @@ def insert_or_update_customer(result, table_name="crm_data_customer"):
                 db.cursor.execute(check_sql, (check_id,))
                 exist_row = db.cursor.fetchone()
                 if exist_row:
-                    for k, v in simple_fields.items():
+                    for k, v in filtered_simple_fields.items():
                         if k != 'id':
                             set_clauses.append(f"{escape_column_name(safe_field_name(k))} = ?")
                             update_values.append(v)
@@ -215,11 +218,11 @@ def insert_or_update_customer(result, table_name="crm_data_customer"):
                         db.conn.commit()
                     record_id = exist_row[0]
                 else:
-                    if 'id' not in simple_fields or not simple_fields['id']:
-                        simple_fields['id'] = uuid.uuid4().hex
-                    columns = [escape_column_name(safe_field_name(k)) for k in simple_fields.keys()]
-                    placeholders = ['?' for _ in simple_fields]
-                    values = list(simple_fields.values())
+                    if 'id' not in filtered_simple_fields or not filtered_simple_fields['id']:
+                        filtered_simple_fields['id'] = uuid.uuid4().hex
+                    columns = [escape_column_name(safe_field_name(k)) for k in filtered_simple_fields.keys()]
+                    placeholders = ['?' for _ in filtered_simple_fields]
+                    values = list(filtered_simple_fields.values())
                     insert_sql = f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES ({', '.join(placeholders)})"
                     db.cursor.execute(insert_sql, values)
                     db.conn.commit()
@@ -231,27 +234,27 @@ def insert_or_update_customer(result, table_name="crm_data_customer"):
                         except (ValueError, TypeError):
                             record_id = str(result[0])
                     else:
-                        record_id = simple_fields['id']
-            elif 'fk_id' in simple_fields:
+                        record_id = filtered_simple_fields['id']
+            elif 'fk_id' in filtered_simple_fields:
                 check_sql = f"SELECT id FROM {table_name} WHERE {escape_column_name('fk_id')} = ?"
-                db.cursor.execute(check_sql, (simple_fields['fk_id'],))
+                db.cursor.execute(check_sql, (filtered_simple_fields['fk_id'],))
                 exist_row = db.cursor.fetchone()
                 if exist_row:
-                    for k, v in simple_fields.items():
+                    for k, v in filtered_simple_fields.items():
                         if k != 'fk_id':
                             set_clauses.append(f"{escape_column_name(safe_field_name(k))} = ?")
                             update_values.append(v)
                     if set_clauses:
                         update_sql = f"UPDATE {table_name} SET {', '.join(set_clauses)} WHERE {escape_column_name('fk_id')} = ?"
-                        db.cursor.execute(update_sql, update_values + [simple_fields['fk_id']])
+                        db.cursor.execute(update_sql, update_values + [filtered_simple_fields['fk_id']])
                         db.conn.commit()
                     record_id = exist_row[0]
                 else:
-                    if 'id' not in simple_fields or not simple_fields['id']:
-                        simple_fields['id'] = uuid.uuid4().hex
-                    columns = [escape_column_name(safe_field_name(k)) for k in simple_fields.keys()]
-                    placeholders = ['?' for _ in simple_fields]
-                    values = list(simple_fields.values())
+                    if 'id' not in filtered_simple_fields or not filtered_simple_fields['id']:
+                        filtered_simple_fields['id'] = uuid.uuid4().hex
+                    columns = [escape_column_name(safe_field_name(k)) for k in filtered_simple_fields.keys()]
+                    placeholders = ['?' for _ in filtered_simple_fields]
+                    values = list(filtered_simple_fields.values())
                     insert_sql = f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES ({', '.join(placeholders)})"
                     db.cursor.execute(insert_sql, values)
                     db.conn.commit()
@@ -263,13 +266,13 @@ def insert_or_update_customer(result, table_name="crm_data_customer"):
                         except (ValueError, TypeError):
                             record_id = str(result[0])
                     else:
-                        record_id = simple_fields['id']
+                        record_id = filtered_simple_fields['id']
             else:
-                if 'id' not in simple_fields or not simple_fields['id']:
-                    simple_fields['id'] = uuid.uuid4().hex
-                columns = [escape_column_name(safe_field_name(k)) for k in simple_fields.keys()]
-                placeholders = ['?' for _ in simple_fields]
-                values = list(simple_fields.values())
+                if 'id' not in filtered_simple_fields or not filtered_simple_fields['id']:
+                    filtered_simple_fields['id'] = uuid.uuid4().hex
+                columns = [escape_column_name(safe_field_name(k)) for k in filtered_simple_fields.keys()]
+                placeholders = ['?' for _ in filtered_simple_fields]
+                values = list(filtered_simple_fields.values())
                 insert_sql = f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES ({', '.join(placeholders)})"
                 db.cursor.execute(insert_sql, values)
                 db.conn.commit()
@@ -281,7 +284,7 @@ def insert_or_update_customer(result, table_name="crm_data_customer"):
                     except (ValueError, TypeError):
                         record_id = str(result[0])
                 else:
-                    record_id = simple_fields['id']
+                    record_id = filtered_simple_fields['id']
         
         # Sau khi đã có record_id, mới xử lý nested fields
         def log_nested(field_name, msg, record_id=None):
@@ -326,12 +329,16 @@ def insert_or_update_customer(result, table_name="crm_data_customer"):
             # Đảm bảo lại các cột reference vật lý sau khi xử lý nested
             ensure_columns_exist(table_name, {k: v for k, v in simple_fields.items() if k.endswith('_ids') or k.endswith('_id')})
 
-            # Update lại toàn bộ simple_fields (bao gồm reference ids) vào bảng hiện tại
-            if len(simple_fields) > 0:
+            # LỌC LẠI simple_fields chỉ giữ các trường đã tồn tại vật lý trước khi update
+            existing_cols = get_existing_columns(table_name)
+            filtered_simple_fields = {k: v for k, v in simple_fields.items() if k in existing_cols}
+
+            # Update lại toàn bộ filtered_simple_fields (bao gồm reference ids) vào bảng hiện tại
+            if len(filtered_simple_fields) > 0:
                 try:
                     update_clauses = []
                     update_values = []
-                    for k, v in simple_fields.items():
+                    for k, v in filtered_simple_fields.items():
                         if k not in ['id', '__id']:
                             update_clauses.append(f"{escape_column_name(safe_field_name(k))} = ?")
                             update_values.append(v)
@@ -339,7 +346,7 @@ def insert_or_update_customer(result, table_name="crm_data_customer"):
                         update_sql = f"UPDATE {table_name} SET {', '.join(update_clauses)} WHERE {escape_column_name('id')} = ?"
                         db.cursor.execute(update_sql, update_values + [record_id])
                         db.conn.commit()
-                        print(f"[LOG] Đã update bảng '{table_name}' id={record_id} với các trường: {list(simple_fields.keys())}")
+                        print(f"[LOG] Đã update bảng '{table_name}' id={record_id} với các trường: {list(filtered_simple_fields.keys())}")
                 except Exception as e:
                     print(f"[LOG][ERR] Lỗi khi update bảng '{table_name}' id={record_id}: {e}")
         
@@ -375,8 +382,6 @@ def insert_or_update_customer(result, table_name="crm_data_customer"):
             customer_id = upsert_recursive(customer_data, table_name)
             
             if customer_id:
-                # Xử lý nested data nhiều level
-                process_nested_data_recursive(customer_data, table_name, customer_id)
                 processed_count += 1
 
         db.conn.commit()

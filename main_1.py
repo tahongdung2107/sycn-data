@@ -17,7 +17,7 @@ def main():
     try:
         # Khởi tạo các service
         order_service = OrderService()
-        # bill_service = BillService()
+        bill_service = BillService()
         category_service = CategoryService()
         product_service = ProductService()
         customer_service = CustomerService()

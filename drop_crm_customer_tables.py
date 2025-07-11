@@ -7,7 +7,7 @@ def drop_all_crm_customer_tables():
     db.cursor.execute("""
         SELECT TABLE_NAME
         FROM INFORMATION_SCHEMA.TABLES
-        WHERE TABLE_NAME LIKE 'crm_data_customer_data%'
+        WHERE TABLE_NAME LIKE 'crm_data_%'
         ORDER BY TABLE_NAME DESC
     """)
     tables = [row[0] for row in db.cursor.fetchall()]
