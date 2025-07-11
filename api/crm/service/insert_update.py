@@ -288,20 +288,15 @@ def insert_or_update_customer(result, table_name="crm_data_customer"):
         
         # Sau khi đã có record_id, mới xử lý nested fields
         def log_nested(field_name, msg, record_id=None):
-            if record_id is not None:
-                print(f"[LOG] {msg} (field: {field_name}, customer id: {record_id})")
-            else:
-                print(f"[LOG] {msg} (field: {field_name})")
+            pass  # Loại bỏ log debug nested
 
         if record_id is not None:
             nested_ids_list = []  # Lưu danh sách ID của các bảng nested
             for field_name, nested_data in nested_fields.items():
                 if not nested_data:
-                    log_nested(field_name, "Bỏ qua vì không có nested data", record_id)
                     continue
                 child_table_name = f"{table_name}_{field_name}"
                 if not check_table_exists(child_table_name):
-                    log_nested(field_name, f"Bảng con '{child_table_name}' không tồn tại, bỏ qua", record_id)
                     continue
                 field_ids = []  # Lưu ID của từng item trong nested field này
                 for i, item in enumerate(nested_data):
@@ -309,9 +304,6 @@ def insert_or_update_customer(result, table_name="crm_data_customer"):
                     child_id = upsert_recursive(item, child_table_name, record_id)
                     if child_id is not None:
                         field_ids.append(str(child_id))
-                        log_nested(field_name, f"Đã insert bảng con '{child_table_name}', item {i}, id={child_id}, fk_id={record_id}", record_id)
-                    else:
-                        log_nested(field_name, f"[ERR] Không thể insert/update vào '{child_table_name}', item {i}, fk_id={record_id}", record_id)
                 # Lưu danh sách ID của field này
                 # Nếu nested là list thì field_name_ids, nếu là dict thì field_name_id
                 if isinstance(nested_data, list):
@@ -322,9 +314,7 @@ def insert_or_update_customer(result, table_name="crm_data_customer"):
                     nested_ids_list.append((ref_col, ','.join(field_ids)))
                     # Gán vào simple_fields để update lại bảng chính
                     simple_fields[ref_col] = ','.join(field_ids)
-                    log_nested(field_name, f"Đã chuẩn bị reference cho '{ref_col}': {field_ids}", record_id)
-                else:
-                    log_nested(field_name, f"[WARN] Không có id nào cho field '{ref_col}'", record_id)
+                # Không cần log nested
 
             # Đảm bảo lại các cột reference vật lý sau khi xử lý nested
             ensure_columns_exist(table_name, {k: v for k, v in simple_fields.items() if k.endswith('_ids') or k.endswith('_id')})
@@ -346,9 +336,8 @@ def insert_or_update_customer(result, table_name="crm_data_customer"):
                         update_sql = f"UPDATE {table_name} SET {', '.join(update_clauses)} WHERE {escape_column_name('id')} = ?"
                         db.cursor.execute(update_sql, update_values + [record_id])
                         db.conn.commit()
-                        print(f"[LOG] Đã update bảng '{table_name}' id={record_id} với các trường: {list(filtered_simple_fields.keys())}")
                 except Exception as e:
-                    print(f"[LOG][ERR] Lỗi khi update bảng '{table_name}' id={record_id}: {e}")
+                    pass  # Không log lỗi nhỏ
         
         return record_id
 
@@ -377,15 +366,18 @@ def insert_or_update_customer(result, table_name="crm_data_customer"):
     try:
         # Xử lý từng customer
         processed_count = 0
+        total_count = len(data_list)
         for i, customer_data in enumerate(data_list, 1):
             # Insert/update customer chính
             customer_id = upsert_recursive(customer_data, table_name)
-            
             if customer_id:
                 processed_count += 1
+            # Log tiến trình tổng quan
+            if i % 100 == 0 or i == total_count:
+                print(f"{i}/{total_count}@insert_update.py")
 
         db.conn.commit()
-        print(f"Đã xử lý thành công {processed_count}/{len(data_list)} customer")
+        print(f"Đã xử lý thành công {processed_count}/{total_count} customer")
 
     except Exception as e:
         print(f"Lỗi trong quá trình insert/update: {e}")
