@@ -41,16 +41,15 @@ class BillService:
             data_key
         )
 
-    def run_demo(self):
+    def run_demo(self, start_date=None, end_date=None):
         """
-        Chạy demo lấy hóa đơn và lưu vào database
+        Chạy demo lấy hóa đơn và lưu vào database với khoảng ngày tuỳ ý (mặc định từ 01/01/2024 đến hiện tại)
         """
-        # Lấy hóa đơn từ ngày 1-1-2025 đến hiện tại
-        end_date = datetime.now()
-        # start_date = datetime(2025, 1, 1)  # Ngày 1-1-2025
-        start_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        # start_date = datetime(2024, 1, 1)
-        
+        if start_date is None:
+            start_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            
+        if end_date is None:
+            end_date = datetime.now()
         result = self.get_bills(
             path='/bill/search',
             start_date=start_date,
@@ -62,11 +61,8 @@ class BillService:
             date_to_field='toDate',
             data_key='bill'
         )
-        
         if result and 'table' in result:
-            # Tạo bảng nếu chưa tồn tại
             create_table(result['table'], self.table_name)
-            # Thêm/cập nhật dữ liệu
             if 'data' in result and result['data']:
                 process_data(result['data'], self.table_name)
             else:

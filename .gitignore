@@ -1,0 +1,24 @@
+# Byte-compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Alembic migrations cache
+alembic/versions/*.pyc
+alembic/versions/__pycache__/
+
+
+# Python testing artifacts
+.tox/
+.nox/
+*.coverage
+.coverage.*
+.cache/
+nosetests.xml
+pytest_cache/
+.pytest_cache/
+htmlcov/
+
+.env
+
+.vscode

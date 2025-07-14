@@ -1,10 +1,13 @@
 from typing import List, Dict, Any
 from database.manager import DatabaseManager
 
-def get_sql_type(field_type: Any) -> str:
+def get_sql_type(field_type: Any, field_name: str = None) -> str:
     """
     Convert field type to SQL Server data type
     """
+    # Ưu tiên các trường đặc biệt
+    if field_name is not None and field_name.lower() in ["encrypt", "encrypt_aes"]:
+        return 'NVARCHAR(MAX)'
     if isinstance(field_type, dict):
         # Handle nested object or array types
         if field_type.get('type') == 'object':
@@ -63,9 +66,9 @@ def create_child_table(db_manager: DatabaseManager, parent_table: str, field_nam
         else:
             # If items is a simple type, create a simple value column
             columns = {
-                'id': 'NVARCHAR(50) PRIMARY KEY',
-                'fk_id': 'NVARCHAR(50)',
-                'value': get_sql_type(items)
+                'id': 'INT IDENTITY(1,1) PRIMARY KEY',
+                'fk_id': 'INT',
+                'value': get_sql_type(items, field_name)
             }
             try:
                 success = db_manager.create_table(child_table_name, columns)
@@ -80,14 +83,14 @@ def create_child_table(db_manager: DatabaseManager, parent_table: str, field_nam
 
     # Convert fields to columns dictionary
     columns = {
-        'id': 'NVARCHAR(50) PRIMARY KEY',
-        'fk_id': 'NVARCHAR(50)'
+        'id': 'INT IDENTITY(1,1) PRIMARY KEY',
+        'fk_id': 'INT'
     }
     
     for field in fields:
         field_name = field['field']
         field_type = field['type']
-        columns[escape_column_name(field_name)] = get_sql_type(field_type)
+        columns[escape_column_name(field_name)] = get_sql_type(field_type, field_name)
     
     try:
         # Create the child table
@@ -129,7 +132,6 @@ def check_column_exists(db_manager: DatabaseManager, table_name: str, column_nam
 def create_table(table_structure: List[Dict[str, Any]], table_name: str):
     """
     Create a table using the provided table structure from Nhanh API
-    
     Args:
         table_structure (List[Dict]): List of field definitions from Nhanh API response
         table_name (str): Name of the table to create
@@ -141,17 +143,17 @@ def create_table(table_structure: List[Dict[str, Any]], table_name: str):
         # Convert fields to columns dictionary
         columns = {}
         nested_fields = []  # Store fields that need child tables
+        is_main_table = table_name == 'crm_data_customer_data'  # Chỉ coi là bảng chính nếu đúng tên
         
         for field in table_structure:
             field_name = field['field']
             field_type = field['type']
             
-            # Add PRIMARY KEY constraint for 'id' field
+            # Xử lý trường id - tất cả bảng đều dùng INT IDENTITY(1,1)
             if field_name == 'id':
-                columns[field_name] = 'NVARCHAR(50) PRIMARY KEY'
+                columns[field_name] = 'INT IDENTITY(1,1) PRIMARY KEY'
             else:
-                columns[escape_column_name(field_name)] = get_sql_type(field_type)
-                
+                columns[escape_column_name(field_name)] = get_sql_type(field_type, field_name)
                 # Store nested fields for child table creation
                 if isinstance(field_type, dict) and field_type.get('type') in ['object', 'array']:
                     nested_fields.append((field_name, field_type))
@@ -167,13 +169,12 @@ def create_table(table_structure: List[Dict[str, Any]], table_name: str):
             table_exists = db_manager.cursor.fetchone()[0] > 0
 
             if not table_exists:
-                # Tạo bảng mới nếu chưa tồn tại
-                success = db_manager.create_table(table_name, columns)
-                if success:
-                    print(f"Bảng '{table_name}' đã được tạo thành công!")
-                else:
-                    print(f"Không thể tạo bảng '{table_name}'")
-                    return
+                # Escape tên cột khi tạo bảng
+                columns_str = ', '.join([f"{escape_column_name(col_name)} {col_type}" for col_name, col_type in columns.items()])
+                create_table_sql = f"CREATE TABLE {table_name} ({columns_str})"
+                db_manager.cursor.execute(create_table_sql)
+                db_manager.conn.commit()
+                print(f"Bảng '{table_name}' đã được tạo thành công!")
             else:
                 # Thêm các cột mới vào bảng đã tồn tại
                 for column_name, column_type in columns.items():
@@ -188,7 +189,6 @@ def create_table(table_structure: List[Dict[str, Any]], table_name: str):
                             print(f"Đã thêm cột '{column_name}' vào bảng '{table_name}'")
                         except Exception as e:
                             print(f"Lỗi khi thêm cột '{column_name}': {str(e)}")
-            
             # Create child tables for nested fields
             for field_name, field_type in nested_fields:
                 create_child_table(db_manager, table_name, field_name, field_type)
