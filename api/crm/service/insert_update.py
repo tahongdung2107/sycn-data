@@ -1,4 +1,4 @@
-from database.manager import DatabaseManager
+from database.manager import DatabaseManagerCRM
 import uuid
 
 def escape_column_name(column_name: str) -> str:
@@ -36,7 +36,7 @@ def insert_or_update_customer(result, table_name="crm_data_customer"):
         return
 
     data_list = result['data']
-    db = DatabaseManager()
+    db = DatabaseManagerCRM()
     if not db.connect():
         print("Không thể kết nối database")
         return

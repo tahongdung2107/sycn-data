@@ -3,6 +3,8 @@ from api.nhanh.bill import BillService
 from api.nhanh.category import CategoryService
 from api.nhanh.product import ProductService
 from api.nhanh.customer import CustomerService
+## CRM
+from api.crm.api.customer import fetch_customer_data
 import logging
 import schedule
 import time
@@ -82,6 +84,7 @@ def sync_delete_and_reload_orders_bills():
         # Đồng bộ lại dữ liệu
         order_service.run_demo(start_date, end_date)
         bill_service.run_demo(start_date, end_date)
+        fetch_customer_data()
         logger.info("Đã xóa và reload orders, bills cho 2 tháng gần nhất!")
     except Exception as e:
         logger.error(f"Lỗi khi xóa và reload orders, bills: {str(e)}")
@@ -98,6 +101,8 @@ def main():
 
         # Lên lịch chạy job xóa và reload orders, bills lúc 00:00 mỗi ngày
         schedule.every().day.at("00:00").do(sync_delete_and_reload_orders_bills)
+
+        # Lên lịch chạy job đồng bộ customer CRM mỗi ngày lúc 00:00
 
         logger.info("Đã lên lịch các job đồng bộ!")
         logger.info("- Orders và Bills: Chạy mỗi 15 phút từ 05:00 đến 23:00")

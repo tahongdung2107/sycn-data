@@ -1,5 +1,5 @@
 import json
-from database.manager import DatabaseManager
+from database.manager import DatabaseManagerCRM
 from typing import Dict, List, Any, Set
 
 # Escape tên cột nếu là từ khóa SQL
@@ -34,7 +34,7 @@ def get_sql_type(value: Any, field_name: str = None) -> str:
     return 'NVARCHAR(255)'
 
 # Kiểm tra cột đã tồn tại chưa
-def check_column_exists(db_manager: DatabaseManager, table_name: str, column_name: str) -> bool:
+def check_column_exists(db_manager: DatabaseManagerCRM, table_name: str, column_name: str) -> bool:
     try:
         if db_manager.connect():
             query = f"""
@@ -51,7 +51,7 @@ def check_column_exists(db_manager: DatabaseManager, table_name: str, column_nam
     return False
 
 # Tạo bảng con cho object/array
-def create_child_table(db_manager: DatabaseManager, parent_table: str, field_name: str, sample_value: Any):
+def create_child_table(db_manager: DatabaseManagerCRM, parent_table: str, field_name: str, sample_value: Any):
     child_table_name = f"{parent_table}_{field_name}"
     columns = {
         'id': 'NVARCHAR(255) PRIMARY KEY',
@@ -117,7 +117,7 @@ def create_child_table(db_manager: DatabaseManager, parent_table: str, field_nam
         pass
 
 # Hàm đệ quy để tạo bảng con cho nested data nhiều level
-def create_nested_child_tables(db_manager: DatabaseManager, parent_table: str, data: Any):
+def create_nested_child_tables(db_manager: DatabaseManagerCRM, parent_table: str, data: Any):
     """
     Tạo bảng con cho tất cả các nested data
     """
@@ -146,7 +146,7 @@ def create_table_from_object(data: Dict[str, Any], table_name: str):
         return
     
     sample_data = data['data'][0] if isinstance(data['data'], list) else data['data']
-    db_manager = DatabaseManager()
+    db_manager = DatabaseManagerCRM()
     columns = {}
     nested_fields = []
     

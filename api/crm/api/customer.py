@@ -53,8 +53,7 @@ def fetch_customer_data():
         print("Không thể lấy thông tin total từ API")
         return first_result
     
-    # total = first_result.get('total', 0)
-    total = 10
+    total = first_result.get('total', 0)
     limit = 1000  # Số lượng record mỗi lần lấy
     all_data = []
     
