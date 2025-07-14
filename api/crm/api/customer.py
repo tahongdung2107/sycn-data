@@ -1,6 +1,7 @@
 from api.crm.service.fetch import call_crm_api
 from api.crm.service.insert_update import insert_or_update_customer
 from api.crm.service.create_table import create_table_from_object
+import datetime
 
 def deep_merge_dicts(dicts):
     # Nếu đầu vào là list, merge từng dict trong list
@@ -39,12 +40,24 @@ def deep_merge_dicts(dicts):
 def fetch_customer_data():
     path = '/_api/base-table/find'
     
+    # Lấy ngày hiện tại trừ đi 1
+    today = datetime.datetime.now()
+    yesterday = today - datetime.timedelta(days=1)
+    start_str = yesterday.strftime('%Y-%m-%dT00:00:00.000Z')
+    end_str = yesterday.strftime('%Y-%m-%dT23:59:59.999Z')
+
     # Lấy response đầu tiên để biết total
     data = {
         "table": "data_customer",
         "limit": 1,
         "skip": 0,
-        "output": "by-key"
+        "output": "by-key",
+        "query": {
+            "created_at": {
+                "$gte": start_str,
+                "$lte": end_str
+            }
+        }
     }
     
     first_result = call_crm_api(path, data)
