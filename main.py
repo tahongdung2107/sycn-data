@@ -100,7 +100,7 @@ def main():
         schedule.every().day.at("23:30").do(sync_categories_and_products)
 
         # Lên lịch chạy job xóa và reload orders, bills lúc 00:00 mỗi ngày
-        schedule.every().day.at("00:00").do(sync_delete_and_reload_orders_bills)
+        schedule.every().day.at("00:10").do(sync_delete_and_reload_orders_bills)
 
         # Lên lịch chạy job đồng bộ customer CRM mỗi ngày lúc 00:00
 
@@ -121,3 +121,4 @@ def main():
 if __name__ == "__main__":
     main()
 
+ 
