@@ -37,18 +37,22 @@ def deep_merge_dicts(dicts):
     else:
         return {}
 
-def fetch_customer_data():
+def fetch_pre_order_dr_data(start_date=None, end_date=None):
     path = '/_api/base-table/find'
     
-    # Lấy ngày hiện tại trừ đi 1
-    today = datetime.datetime.now()
-    yesterday = today - datetime.timedelta(days=1)
-    start_str = yesterday.strftime('%Y-%m-%dT00:00:00.000Z')
-    end_str = yesterday.strftime('%Y-%m-%dT23:59:59.999Z')
+    # Nếu không truyền ngày thì lấy ngày hôm qua
+    if not start_date or not end_date:
+        today = datetime.datetime.now()
+        yesterday = today - datetime.timedelta(days=1)
+        start_str = yesterday.strftime('%Y-%m-%dT00:00:00.000Z')
+        end_str = yesterday.strftime('%Y-%m-%dT23:59:59.999Z')
+    else:
+        start_str = start_date
+        end_str = end_date
 
     # Lấy response đầu tiên để biết total
     data = {
-        "table": "data_customer",
+        "table": "data_extra_3",
         "limit": 1,
         "skip": 0,
         "output": "by-key",
@@ -70,7 +74,7 @@ def fetch_customer_data():
     limit = 1000  # Số lượng record mỗi lần lấy
     all_data = []
     
-    print(f"Tổng số customer cần lấy: {total}")
+    print(f"Tổng số pre-order DR cần lấy: {total}")
     
     # Tính số batch cần lấy
     total_batches = (total + limit - 1) // limit  # Làm tròn lên
@@ -81,10 +85,16 @@ def fetch_customer_data():
         print(f"Đang lấy batch {batch + 1}/{total_batches} (skip: {skip})")
         
         data = {
-            "table": "data_customer",
+            "table": "data_extra_3",
             "limit": limit,
             "skip": skip,
-            "output": "by-key"
+            "output": "by-key",
+            "query": {
+                "created_at": {
+                    "$gte": start_str,
+                    "$lte": end_str
+                }
+            }
         }
         
         result = call_crm_api(path, data)
@@ -98,7 +108,7 @@ def fetch_customer_data():
             if batch == 0 and batch_data:
                 merged = deep_merge_dicts(batch_data)
                 result_for_table = {'data': [merged]}
-                create_table_from_object(result_for_table, "crm_data_customer")
+                create_table_from_object(result_for_table, "crm_data_pre_order_dr")
         else:
             print(f"Lỗi khi lấy batch {batch + 1}")
     
@@ -107,6 +117,6 @@ def fetch_customer_data():
     # Insert/update toàn bộ dữ liệu
     if all_data:
         final_result = {'data': all_data}
-        insert_or_update_customer(final_result)
+        insert_or_update_customer(final_result, table_name="crm_data_pre_order_dr")
     
     return {'data': all_data, 'total': total}

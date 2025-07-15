@@ -5,6 +5,8 @@ from api.nhanh.product import ProductService
 from api.nhanh.customer import CustomerService
 ## CRM
 from api.crm.api.customer import fetch_customer_data
+from api.crm.api.pre_order import fetch_pre_order_data
+from api.crm.api.pre_order_dr import fetch_pre_order_dr_data
 import logging
 import schedule
 import time
@@ -43,6 +45,8 @@ def sync_orders_and_bills():
         order_service.run_demo()
         bill_service.run_demo()
         customer_service.run_demo()
+        fetch_pre_order_data()
+        fetch_pre_order_dr_data()
         logger.info("Đồng bộ orders và bills hoàn tất!")
     except Exception as e:
         logger.error(f"Lỗi khi đồng bộ orders và bills: {str(e)}")

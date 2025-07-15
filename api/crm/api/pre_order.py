@@ -37,7 +37,7 @@ def deep_merge_dicts(dicts):
     else:
         return {}
 
-def fetch_customer_data():
+def fetch_pre_order_data():
     path = '/_api/base-table/find'
     
     # Lấy ngày hiện tại trừ đi 1
@@ -48,7 +48,7 @@ def fetch_customer_data():
 
     # Lấy response đầu tiên để biết total
     data = {
-        "table": "data_customer",
+        "table": "data_extra_2",
         "limit": 1,
         "skip": 0,
         "output": "by-key",
@@ -70,7 +70,7 @@ def fetch_customer_data():
     limit = 1000  # Số lượng record mỗi lần lấy
     all_data = []
     
-    print(f"Tổng số customer cần lấy: {total}")
+    print(f"Tổng số pre-order cần lấy: {total}")
     
     # Tính số batch cần lấy
     total_batches = (total + limit - 1) // limit  # Làm tròn lên
@@ -81,7 +81,7 @@ def fetch_customer_data():
         print(f"Đang lấy batch {batch + 1}/{total_batches} (skip: {skip})")
         
         data = {
-            "table": "data_customer",
+            "table": "data_extra_2",
             "limit": limit,
             "skip": skip,
             "output": "by-key"
@@ -98,7 +98,7 @@ def fetch_customer_data():
             if batch == 0 and batch_data:
                 merged = deep_merge_dicts(batch_data)
                 result_for_table = {'data': [merged]}
-                create_table_from_object(result_for_table, "crm_data_customer")
+                create_table_from_object(result_for_table, "crm_data_pre_order")
         else:
             print(f"Lỗi khi lấy batch {batch + 1}")
     
@@ -107,6 +107,6 @@ def fetch_customer_data():
     # Insert/update toàn bộ dữ liệu
     if all_data:
         final_result = {'data': all_data}
-        insert_or_update_customer(final_result)
+        insert_or_update_customer(final_result, table_name="crm_data_pre_order")
     
     return {'data': all_data, 'total': total}
