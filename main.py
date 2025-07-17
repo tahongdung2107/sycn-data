@@ -7,6 +7,7 @@ from api.nhanh.customer import CustomerService
 from api.crm.api.customer import fetch_customer_data
 from api.crm.api.pre_order import fetch_pre_order_data
 from api.crm.api.pre_order_dr import fetch_pre_order_dr_data
+from api.crm.api.sales import fetch_sales_data
 import logging
 import schedule
 import time
@@ -61,6 +62,7 @@ def sync_categories_and_products():
         product_service = ProductService()
         product_service.run_demo()
         category_service.run_demo()
+        fetch_sales_data()
         logger.info("Đồng bộ categories và products hoàn tất!")
     except Exception as e:
         logger.error(f"Lỗi khi đồng bộ categories và products: {str(e)}")
