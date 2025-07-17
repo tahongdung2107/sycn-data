@@ -80,11 +80,13 @@ def sync_delete_and_reload_orders_bills():
         
         # Tính ngày bắt đầu và kết thúc
         end_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        start_date = (end_date.replace(day=1) - pd.DateOffset(months=1)).replace(day=1)  # Lùi về đầu tháng trước 2 tháng
+        start_date = (end_date.replace(day=1) - pd.DateOffset(months=2)).replace(day=1)  # Lùi về đầu tháng trước 2 tháng
         start_date = start_date.to_pydatetime()
         
-        # Xóa dữ liệu trong khoảng này
-        delete_records_by_date('orders', 'createdDateTime', start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
+        # Chuyển ngày sang timestamp (milliseconds)
+        start_ts = int(start_date.timestamp())
+        end_ts = int(end_date.timestamp())
+        delete_records_by_date('orders', 'updatedAt', start_ts, end_ts)
         delete_records_by_date('bills', 'createdDateTime', start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
         
         # Đồng bộ lại dữ liệu
