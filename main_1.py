@@ -43,9 +43,9 @@ def main():
 
         # --- Sử dụng hàm fetch_customer_data từ CRM ---
         logger.info("Lấy dữ liệu customer từ CRM...")
-        # crm_customer = fetch_customer_data()
-        crm_pre_order = fetch_pre_order_data()
-        crm_pre_order_dr = fetch_pre_order_dr_data()
+        crm_customer = fetch_customer_data()
+        # crm_pre_order = fetch_pre_order_data()
+        # crm_pre_order_dr = fetch_pre_order_dr_data()
         print("Kết quả từ CRM:")
 
     except Exception as e:

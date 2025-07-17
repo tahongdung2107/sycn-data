@@ -43,9 +43,8 @@ def fetch_pre_order_dr_data(start_date=None, end_date=None):
     # Nếu không truyền ngày thì lấy ngày hôm qua
     if not start_date or not end_date:
         today = datetime.datetime.now()
-        yesterday = today - datetime.timedelta(days=1)
-        start_str = yesterday.strftime('%Y-%m-%dT00:00:00.000Z')
-        end_str = yesterday.strftime('%Y-%m-%dT23:59:59.999Z')
+        start_str = today.strftime('%Y-%m-%dT00:00:00.000Z')
+        end_str = today.strftime('%Y-%m-%dT23:59:59.999Z')
     else:
         start_str = start_date
         end_str = end_date
@@ -57,7 +56,7 @@ def fetch_pre_order_dr_data(start_date=None, end_date=None):
         "skip": 0,
         "output": "by-key",
         "query": {
-            "created_at": {
+            "updated_at": {
                 "$gte": start_str,
                 "$lte": end_str
             }
@@ -90,7 +89,7 @@ def fetch_pre_order_dr_data(start_date=None, end_date=None):
             "skip": skip,
             "output": "by-key",
             "query": {
-                "created_at": {
+                "updated_at": {
                     "$gte": start_str,
                     "$lte": end_str
                 }

@@ -42,9 +42,8 @@ def fetch_pre_order_data():
     
     # Lấy ngày hiện tại trừ đi 1
     today = datetime.datetime.now()
-    yesterday = today - datetime.timedelta(days=1)
-    start_str = yesterday.strftime('%Y-%m-%dT00:00:00.000Z')
-    end_str = yesterday.strftime('%Y-%m-%dT23:59:59.999Z')
+    start_str = today.strftime('%Y-%m-%dT00:00:00.000Z')
+    end_str = today.strftime('%Y-%m-%dT23:59:59.999Z')
 
     # Lấy response đầu tiên để biết total
     data = {
@@ -53,7 +52,7 @@ def fetch_pre_order_data():
         "skip": 0,
         "output": "by-key",
         "query": {
-            "created_at": {
+            "updated_at": {
                 "$gte": start_str,
                 "$lte": end_str
             }
