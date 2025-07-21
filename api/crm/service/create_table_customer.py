@@ -57,40 +57,60 @@ def create_child_table(db_manager: DatabaseManagerCRM, parent_table: str, field_
         'id': 'NVARCHAR(255) PRIMARY KEY',
         'fk_id': 'NVARCHAR(255)'
     }
-    
-    # Xử lý sample_value để lấy cấu trúc cột
-    nested_fields_in_child = []  # Lưu các nested fields trong bảng con
-    
+    nested_fields_in_child = []
     if isinstance(sample_value, dict):
         for k, v in sample_value.items():
+            if k == 'data':
+                continue
             if isinstance(v, (dict, list)):
                 nested_fields_in_child.append((k, v))
-                # Thêm cột reference cho nested field trong bảng con
                 if isinstance(v, list):
-                    columns[escape_column_name(f"{k}_ids")] = 'NVARCHAR(MAX)'
+                    col_name = escape_column_name(f"{k}_ids")
+                    if col_name not in columns:
+                        columns[col_name] = 'NVARCHAR(MAX)'
                 else:
-                    columns[escape_column_name(f"{k}_id")] = 'NVARCHAR(255)'
+                    col_name = escape_column_name(f"{k}_id")
+                    if col_name not in columns:
+                        columns[col_name] = 'NVARCHAR(255)'
             else:
-                columns[escape_column_name(k)] = get_sql_type(v, k)
+                col_name = escape_column_name(k)
+                if col_name not in columns:
+                    columns[col_name] = get_sql_type(v, k)
     elif isinstance(sample_value, list) and sample_value:
-        first = sample_value[0]
-        if isinstance(first, dict):
-            for k, v in first.items():
-                if isinstance(v, (dict, list)):
-                    nested_fields_in_child.append((k, v))
-                    # Thêm cột reference cho nested field trong bảng con
-                    if isinstance(v, list):
-                        columns[escape_column_name(f"{k}_ids")] = 'NVARCHAR(MAX)'
-                    else:
-                        columns[escape_column_name(f"{k}_id")] = 'NVARCHAR(255)'
+        # Duyệt qua tất cả phần tử, gom tất cả key lại
+        all_keys = set()
+        key_type_map = {}
+        for item in sample_value:
+            if isinstance(item, dict):
+                for k, v in item.items():
+                    if k == 'data':
+                        continue
+                    if k not in key_type_map:
+                        key_type_map[k] = v
+                    all_keys.add(k)
+        for k in all_keys:
+            v = key_type_map.get(k, None)
+            if isinstance(v, (dict, list)):
+                nested_fields_in_child.append((k, v))
+                if isinstance(v, list):
+                    col_name = escape_column_name(f"{k}_ids")
+                    if col_name not in columns:
+                        columns[col_name] = 'NVARCHAR(MAX)'
                 else:
-                    columns[escape_column_name(k)] = get_sql_type(v, k)
-        else:
-            columns['value'] = get_sql_type(first, field_name)
+                    col_name = escape_column_name(f"{k}_id")
+                    if col_name not in columns:
+                        columns[col_name] = 'NVARCHAR(255)'
+            else:
+                col_name = escape_column_name(k)
+                if col_name not in columns:
+                    columns[col_name] = get_sql_type(v, k)
+        # Nếu là list các giá trị đơn giản
+        if not all_keys:
+            if 'value' not in columns:
+                columns['value'] = get_sql_type(sample_value[0], field_name)
     else:
-        columns['value'] = get_sql_type(sample_value, field_name)
-    
-    # Tạo bảng con
+        if 'value' not in columns:
+            columns['value'] = get_sql_type(sample_value, field_name)
     try:
         if db_manager.connect():
             check_table_query = f"""
@@ -103,18 +123,18 @@ def create_child_table(db_manager: DatabaseManagerCRM, parent_table: str, field_
                 create_table_sql = f"CREATE TABLE {child_table_name} ({columns_str})"
                 db_manager.cursor.execute(create_table_sql)
                 db_manager.conn.commit()
+                print(f"Đã tạo bảng con: {child_table_name}")
             else:
                 for column_name, column_type in columns.items():
                     if not check_column_exists(db_manager, child_table_name, column_name):
                         alter_query = f"ALTER TABLE {child_table_name} ADD {column_name} {column_type}"
                         db_manager.cursor.execute(alter_query)
                         db_manager.conn.commit()
-            
-            # Tạo bảng con cho nested fields trong bảng con này
+                        print(f"Đã thêm cột {column_name} vào bảng {child_table_name}")
             for nested_field_name, nested_field_value in nested_fields_in_child:
                 create_child_table(db_manager, child_table_name, nested_field_name, nested_field_value)
     except Exception as e:
-        pass
+        print(f"Lỗi khi tạo bảng con {child_table_name}: {e}")
 
 # Hàm đệ quy để tạo bảng con cho nested data nhiều level
 def create_nested_child_tables(db_manager: DatabaseManagerCRM, parent_table: str, data: Any):
@@ -123,6 +143,8 @@ def create_nested_child_tables(db_manager: DatabaseManagerCRM, parent_table: str
     """
     if isinstance(data, dict):
         for key, value in data.items():
+            if key == 'data':
+                continue
             if isinstance(value, (dict, list)) and value:
                 # Tạo bảng con cho field này
                 create_child_table(db_manager, parent_table, key, value)
@@ -151,6 +173,8 @@ def create_table_from_object(data: Dict[str, Any], table_name: str):
     nested_fields = []
     
     for key, value in sample_data.items():
+        if key == 'data':
+            continue
         if isinstance(value, (dict, list)):
             nested_fields.append((key, value))
             # Thêm cột reference cho nested field

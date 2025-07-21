@@ -27,7 +27,8 @@ def deep_merge_dicts(dicts):
                     merged_dict = deep_merge_dicts(all_list_items)
                     merged[key] = [merged_dict]
                 else:
-                    merged[key] = [all_list_items[0]] if all_list_items else []
+                    # Gộp toàn bộ, loại trùng cho list các primitive (id, string, int, ...)
+                    merged[key] = list(set(all_list_items)) if all_list_items else []
             else:
                 merged[key] = non_none_values[0]
         return merged
@@ -41,9 +42,9 @@ def fetch_customer_data():
     path = '/_api/base-table/find'
     
     # Lấy ngày hiện tại trừ đi 1
-    today = datetime.datetime.now()
+    today = datetime.datetime(2024, 1, 1)
     start_str = today.strftime('%Y-%m-%dT00:00:00.000Z')
-    end_str = today.strftime('%Y-%m-%dT23:59:59.999Z')
+    end_str = datetime.datetime.now().strftime('%Y-%m-%dT23:59:59.999Z')
 
     # Lấy response đầu tiên để biết total
     data = {

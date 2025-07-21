@@ -92,7 +92,7 @@ def sync_delete_and_reload_orders_bills():
         # Đồng bộ lại dữ liệu
         order_service.run_demo(start_date, end_date)
         bill_service.run_demo(start_date, end_date)
-        fetch_customer_data()
+        # fetch_customer_data()
         logger.info("Đã xóa và reload orders, bills cho 2 tháng gần nhất!")
     except Exception as e:
         logger.error(f"Lỗi khi xóa và reload orders, bills: {str(e)}")

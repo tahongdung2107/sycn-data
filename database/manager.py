@@ -132,7 +132,6 @@ class DatabaseManagerCRM:
         try:
             self.conn = pyodbc.connect(self.conn_str)
             self.cursor = self.conn.cursor()
-            print("Kết nối thành công đến CRM DB!")
             return True
         except Exception as e:
             print(f"Error connecting to CRM database: {str(e)}")
@@ -199,4 +198,3 @@ class DatabaseManagerCRM:
             self.cursor.close()
         if self.conn:
             self.conn.close()
-            print("Đã đóng kết nối CRM DB.")

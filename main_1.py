@@ -53,11 +53,11 @@ def sync_delete_and_reload_orders_bills():
 def main():
     try:
         # Khởi tạo các service
-        # order_service = OrderService()
-        # bill_service = BillService()
-        # category_service = CategoryService()
-        # product_service = ProductService()
-        # customer_service = CustomerService()
+        order_service = OrderService()
+        bill_service = BillService()
+        category_service = CategoryService()
+        product_service = ProductService()
+        customer_service = CustomerService()
         # sync_delete_and_reload_orders_bills()
         # Chạy đồng bộ categories
         logger.info("Bắt đầu đồng bộ categories...")
@@ -67,8 +67,8 @@ def main():
 
         # Chạy đồng bộ orders và bills
         logger.info("Bắt đầu đồng bộ orders và bills...")
-        # order_service.run_demo()
-        # bill_service.run_demo()
+        order_service.run_demo()
+        bill_service.run_demo()
         logger.info("Đồng bộ orders và bills hoàn tất!")
 
         # Chạy đồng bộ customers
@@ -77,12 +77,12 @@ def main():
         logger.info("Đồng bộ customers hoàn tất!")
 
         # --- Sử dụng hàm fetch_customer_data từ CRM ---
-        logger.info("Lấy dữ liệu customer từ CRM...")
-        crm_customer = fetch_customer_data()
+        # logger.info("Lấy dữ liệu customer từ CRM...")
+        # crm_customer = fetch_customer_data()
         # crm_pre_order = fetch_pre_order_data()
         # crm_pre_order_dr = fetch_pre_order_dr_data()
         # crm_sales = fetch_sales_data()
-        print("Kết quả từ CRM:")
+        # print("Kết quả từ CRM:")
 
     except Exception as e:
         logger.error(f"Lỗi khi chạy đồng bộ: {str(e)}")
