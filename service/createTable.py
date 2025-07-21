@@ -149,9 +149,9 @@ def create_table(table_structure: List[Dict[str, Any]], table_name: str):
             field_name = field['field']
             field_type = field['type']
             
-            # Xử lý trường id - tất cả bảng đều dùng INT IDENTITY(1,1)
+            # Sửa: Trường id dùng NVARCHAR(50) PRIMARY KEY thay vì INT IDENTITY(1,1)
             if field_name == 'id':
-                columns[field_name] = 'INT IDENTITY(1,1) PRIMARY KEY'
+                columns[field_name] = "NVARCHAR(50) PRIMARY KEY"
             else:
                 columns[escape_column_name(field_name)] = get_sql_type(field_type, field_name)
                 # Store nested fields for child table creation
