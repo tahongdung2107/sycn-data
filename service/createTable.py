@@ -83,8 +83,8 @@ def create_child_table(db_manager: DatabaseManager, parent_table: str, field_nam
 
     # Convert fields to columns dictionary
     columns = {
-        'id': 'INT IDENTITY(1,1) PRIMARY KEY',
-        'fk_id': 'INT'
+        'id': 'NVARCHAR(50) PRIMARY KEY',
+        'fk_id': 'NVARCHAR(50)'
     }
     
     for field in fields:

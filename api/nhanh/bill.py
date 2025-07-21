@@ -46,8 +46,8 @@ class BillService:
         Chạy demo lấy hóa đơn và lưu vào database với khoảng ngày tuỳ ý (mặc định từ 01/01/2024 đến hiện tại)
         """
         if start_date is None:
-            start_date = datetime(2024, 1, 1)
-            # start_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            # start_date = datetime(2024, 1, 1)
+            start_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
             
         if end_date is None:
             end_date = datetime.now()

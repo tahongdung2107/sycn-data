@@ -46,8 +46,8 @@ def sync_orders_and_bills():
         order_service.run_demo()
         bill_service.run_demo()
         customer_service.run_demo()
-        fetch_pre_order_data()
-        fetch_pre_order_dr_data()
+        # fetch_pre_order_data()
+        # fetch_pre_order_dr_data()
         logger.info("Đồng bộ orders và bills hoàn tất!")
     except Exception as e:
         logger.error(f"Lỗi khi đồng bộ orders và bills: {str(e)}")
@@ -62,7 +62,7 @@ def sync_categories_and_products():
         product_service = ProductService()
         product_service.run_demo()
         category_service.run_demo()
-        fetch_sales_data()
+        # fetch_sales_data()
         logger.info("Đồng bộ categories và products hoàn tất!")
     except Exception as e:
         logger.error(f"Lỗi khi đồng bộ categories và products: {str(e)}")

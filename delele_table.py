@@ -12,7 +12,7 @@ def delete_crm_customer_tables():
         # Lấy danh sách bảng cần xóa
         db.cursor.execute("""
             SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES
-            WHERE TABLE_NAME LIKE 'orders%'
+            WHERE TABLE_NAME LIKE 'bills%'
         """)
         tables = [row[0] for row in db.cursor.fetchall()]
         if not tables:

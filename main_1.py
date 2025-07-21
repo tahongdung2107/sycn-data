@@ -67,13 +67,13 @@ def main():
 
         # Chạy đồng bộ orders và bills
         logger.info("Bắt đầu đồng bộ orders và bills...")
-        order_service.run_demo()
+        # order_service.run_demo()
         # bill_service.run_demo()
         logger.info("Đồng bộ orders và bills hoàn tất!")
 
         # Chạy đồng bộ customers
         logger.info("Bắt đầu đồng bộ customers...")
-        # customer_service.run_demo()
+        customer_service.run_demo()
         logger.info("Đồng bộ customers hoàn tất!")
 
         # --- Sử dụng hàm fetch_customer_data từ CRM ---
