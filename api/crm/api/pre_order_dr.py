@@ -45,6 +45,8 @@ def fetch_pre_order_dr_data(start_date=None, end_date=None):
         today = datetime.datetime.now()
         start_str = today.strftime('%Y-%m-%dT00:00:00.000Z')
         end_str = today.strftime('%Y-%m-%dT23:59:59.999Z')
+        # start_str = datetime.datetime(2024, 1, 1).strftime('%Y-%m-%dT00:00:00.000Z')
+        # end_str = datetime.datetime.now().strftime('%Y-%m-%dT23:59:59.999Z')
     else:
         start_str = start_date
         end_str = end_date
