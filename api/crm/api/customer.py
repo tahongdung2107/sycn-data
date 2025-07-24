@@ -38,11 +38,15 @@ def deep_merge_dicts(dicts):
     else:
         return {}
 
-def fetch_customer_data():
+def fetch_customer_data(skip_start=0):
+    """
+    Lấy dữ liệu customer từ CRM, cho phép tiếp tục từ skip_start (số bản ghi đã xử lý).
+    Ví dụ: fetch_customer_data(skip_start=32400) sẽ chỉ lấy từ bản ghi 32400 trở đi.
+    """
     path = '/_api/base-table/find'
     
     # Lấy ngày hiện tại trừ đi 1
-    today = datetime.datetime(2024, 1, 1)
+    today = datetime.datetime.now() - datetime.timedelta(days=1)
     start_str = today.strftime('%Y-%m-%dT00:00:00.000Z')
     end_str = datetime.datetime.now().strftime('%Y-%m-%dT23:59:59.999Z')
 
@@ -72,12 +76,16 @@ def fetch_customer_data():
     
     print(f"Tổng số customer cần lấy: {total}")
     
-    # Tính số batch cần lấy
-    total_batches = (total + limit - 1) // limit  # Làm tròn lên
+    # Tính số batch cần lấy, bắt đầu từ skip_start
+    remain = total - skip_start
+    if remain <= 0:
+        print("Đã xử lý hết dữ liệu.")
+        return {'data': [], 'total': total}
+    total_batches = (remain + limit - 1) // limit  # Làm tròn lên
     
     # Lấy từng batch
     for batch in range(total_batches):
-        skip = batch * limit
+        skip = skip_start + batch * limit
         print(f"Đang lấy batch {batch + 1}/{total_batches} (skip: {skip})")
         
         data = {
@@ -94,8 +102,8 @@ def fetch_customer_data():
             all_data.extend(batch_data)
             print(f"Đã lấy được {len(batch_data)} records trong batch này")
             
-            # Tạo bảng từ batch đầu tiên
-            if batch == 0 and batch_data:
+            # Tạo bảng từ batch đầu tiên (chỉ khi skip_start=0)
+            if batch == 0 and batch_data and skip_start == 0:
                 merged = deep_merge_dicts(batch_data)
                 result_for_table = {'data': [merged]}
                 create_table_from_object(result_for_table, "crm_data_customer")

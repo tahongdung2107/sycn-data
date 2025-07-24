@@ -3,7 +3,7 @@ from api.nhanh.bill import BillService
 from api.nhanh.category import CategoryService
 from api.nhanh.product import ProductService
 from api.nhanh.customer import CustomerService
-from api.crm.api.customer import fetch_customer_data  # Thêm dòng này
+from api.crm.api.customer import fetch_customer_data
 from api.crm.api.pre_order import fetch_pre_order_data
 from api.crm.api.pre_order_dr import fetch_pre_order_dr_data
 from api.crm.api.sales import fetch_sales_data
