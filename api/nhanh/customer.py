@@ -293,8 +293,8 @@ class CustomerService:
         try:
             # Lấy khách hàng từ ngày 1-1-2025 đến hiện tại
             end_date = datetime.now()
-            start_date = datetime(2024, 1, 1)
-            # start_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            # start_date = datetime(2024, 1, 1)
+            start_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
             
             # Gọi API lấy dữ liệu và đồng bộ một lần duy nhất
             self.sync_customers(

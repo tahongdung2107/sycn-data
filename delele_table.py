@@ -3,8 +3,8 @@ from database.manager import DatabaseManager
 
 # Xóa tất cả các bảng bắt đầu bằng 'crm_data_customer'
 def delete_crm_customer_tables():
-    # db = DatabaseManagerCRM()
-    db = DatabaseManager()
+    db = DatabaseManagerCRM()
+    # db = DatabaseManager()
     if not db.connect():
         print("Không thể kết nối database")
         return
@@ -12,7 +12,7 @@ def delete_crm_customer_tables():
         # Lấy danh sách bảng cần xóa
         db.cursor.execute("""
             SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES
-            WHERE TABLE_NAME LIKE 'bills%'
+            WHERE TABLE_NAME LIKE 'crm_data_customer%'
         """)
         tables = [row[0] for row in db.cursor.fetchall()]
         if not tables:

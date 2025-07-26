@@ -3,54 +3,17 @@ from api.crm.service.insert_update_customer import insert_or_update_customer
 from api.crm.service.create_table_customer import create_table_from_object
 import datetime
 
-def deep_merge_dicts(dicts):
-    # Nếu đầu vào là list, merge từng dict trong list
-    if isinstance(dicts, list):
-        merged = {}
-        all_keys = set()
-        for d in dicts:
-            if isinstance(d, dict):
-                all_keys.update(d.keys())
-        for key in all_keys:
-            values = [d.get(key) for d in dicts if isinstance(d, dict) and key in d]
-            non_none_values = [v for v in values if v is not None]
-            if not non_none_values:
-                merged[key] = None
-            elif isinstance(non_none_values[0], dict):
-                merged[key] = deep_merge_dicts(non_none_values)
-            elif isinstance(non_none_values[0], list):
-                all_list_items = []
-                for value in non_none_values:
-                    if isinstance(value, list):
-                        all_list_items.extend(value)
-                if all_list_items and all(isinstance(item, dict) for item in all_list_items):
-                    merged_dict = deep_merge_dicts(all_list_items)
-                    merged[key] = [merged_dict]
-                else:
-                    # Gộp toàn bộ, loại trùng cho list các primitive (id, string, int, ...)
-                    merged[key] = list(set(all_list_items)) if all_list_items else []
-            else:
-                merged[key] = non_none_values[0]
-        return merged
-    # Nếu đầu vào là dict, trả về luôn
-    elif isinstance(dicts, dict):
-        return dicts
-    else:
-        return {}
-
-def fetch_customer_data(skip_start=0):
-    """
-    Lấy dữ liệu customer từ CRM, cho phép tiếp tục từ skip_start (số bản ghi đã xử lý).
-    Ví dụ: fetch_customer_data(skip_start=32400) sẽ chỉ lấy từ bản ghi 32400 trở đi.
-    """
+def fetch_customer_data(start_date=None, end_date=None):
     path = '/_api/base-table/find'
-    
-    # Lấy ngày hiện tại trừ đi 1
-    today = datetime.datetime.now() - datetime.timedelta(days=1)
-    start_str = today.strftime('%Y-%m-%dT00:00:00.000Z')
-    end_str = datetime.datetime.now().strftime('%Y-%m-%dT23:59:59.999Z')
-
-    # Lấy response đầu tiên để biết total
+    # Nếu không truyền ngày thì lấy ngày hôm qua
+    if not start_date or not end_date:
+        # today = datetime.datetime.now()
+        # start_str = today.strftime('%Y-%m-%dT00:00:00.000Z')
+        start_str = datetime.datetime(2024, 1, 1).strftime('%Y-%m-%dT00:00:00.000Z')
+        end_str = datetime.datetime.now().strftime('%Y-%m-%dT23:59:59.999Z')
+    else:
+        start_str = start_date
+        end_str = end_date
     data = {
         "table": "data_customer",
         "limit": 1,
@@ -63,58 +26,49 @@ def fetch_customer_data(skip_start=0):
             }
         }
     }
-    
+    # Lấy response đầu tiên để biết total
     first_result = call_crm_api(path, data)
-    
     if not isinstance(first_result, dict) or 'total' not in first_result:
         print("Không thể lấy thông tin total từ API")
         return first_result
-    
     total = first_result.get('total', 0)
-    limit = 1000  # Số lượng record mỗi lần lấy
+    limit = 1000
     all_data = []
-    
     print(f"Tổng số customer cần lấy: {total}")
-    
-    # Tính số batch cần lấy, bắt đầu từ skip_start
-    remain = total - skip_start
-    if remain <= 0:
-        print("Đã xử lý hết dữ liệu.")
-        return {'data': [], 'total': total}
-    total_batches = (remain + limit - 1) // limit  # Làm tròn lên
-    
-    # Lấy từng batch
+    total_batches = (total + limit - 1) // limit
     for batch in range(total_batches):
-        skip = skip_start + batch * limit
+        skip = batch * limit
         print(f"Đang lấy batch {batch + 1}/{total_batches} (skip: {skip})")
-        
         data = {
             "table": "data_customer",
             "limit": limit,
             "skip": skip,
-            "output": "by-key"
+            "output": "by-key",
+            "query": {
+                "updated_at": {
+                    "$gte": start_str,
+                    "$lte": end_str
+                }
+            }
         }
-        
         result = call_crm_api(path, data)
-        
         if isinstance(result, dict) and 'data' in result and isinstance(result['data'], list):
             batch_data = result['data']
             all_data.extend(batch_data)
             print(f"Đã lấy được {len(batch_data)} records trong batch này")
-            
-            # Tạo bảng từ batch đầu tiên (chỉ khi skip_start=0)
-            if batch == 0 and batch_data and skip_start == 0:
-                merged = deep_merge_dicts(batch_data)
+            # Tạo bảng từ batch đầu tiên
+            if batch == 0 and batch_data:
+                merged = batch_data[0]
                 result_for_table = {'data': [merged]}
+                print("Tạo bảng từ batch đầu tiên...")
                 create_table_from_object(result_for_table, "crm_data_customer")
         else:
             print(f"Lỗi khi lấy batch {batch + 1}")
-    
     print(f"Đã lấy được tổng cộng: {len(all_data)} records")
-    
     # Insert/update toàn bộ dữ liệu
     if all_data:
         final_result = {'data': all_data}
-        insert_or_update_customer(final_result)
-    
+        print("Bắt đầu insert/update dữ liệu vào database...")
+        insert_or_update_customer(final_result, table_name="crm_data_customer")
+        print("Đã insert/update xong dữ liệu vào database!")
     return {'data': all_data, 'total': total}

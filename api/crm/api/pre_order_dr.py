@@ -1,6 +1,6 @@
 from api.crm.service.fetch import call_crm_api
 from api.crm.service.insert_update_customer import insert_or_update_customer
-from api.crm.service.create_table_customer import create_table_from_object
+from api.crm.service.create_table_customer_1 import create_table_from_object
 import datetime
 
 def deep_merge_dicts(dicts):
