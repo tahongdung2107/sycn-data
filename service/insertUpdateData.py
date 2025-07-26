@@ -186,7 +186,9 @@ class DataInserter:
                     IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = '{child_table}')
                     BEGIN
                         CREATE TABLE {child_table} (
-                            {', '.join([f'[{col}] NVARCHAR(MAX)' for col in all_columns])}
+                            [id] NVARCHAR(50) PRIMARY KEY,
+                            [fk_id] NVARCHAR(50),
+                            {', '.join([f'[{col}] NVARCHAR(MAX)' for col in all_columns if col not in ['id', 'fk_id']])}
                         )
                     END
                     """
@@ -289,7 +291,9 @@ class DataInserter:
                     IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = '{child_table}')
                     BEGIN
                         CREATE TABLE {child_table} (
-                            {', '.join([f'[{col}] NVARCHAR(MAX)' for col in all_columns])}
+                            [id] NVARCHAR(50) PRIMARY KEY,
+                            [fk_id] NVARCHAR(50),
+                            {', '.join([f'[{col}] NVARCHAR(MAX)' for col in all_columns if col not in ['id', 'fk_id']])}
                         )
                     END
                     """

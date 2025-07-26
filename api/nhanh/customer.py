@@ -85,7 +85,8 @@ class CustomerService:
         """
         # Nếu không có ngày bắt đầu và kết thúc, lấy tất cả khách hàng
         if not start_date:
-            start_date = datetime(2025, 1, 1)  # Ngày mặc định
+            # start_date = datetime(2024, 1, 1)  # Ngày mặc định
+            start_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
         if not end_date:
             end_date = datetime.now()
             

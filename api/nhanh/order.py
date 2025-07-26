@@ -54,7 +54,7 @@ class OrderService:
             path='/order/index',
             start_date=start_date,
             end_date=end_date,
-            params={},
+            params={ 'dataOptions': ["tags"] },
             step_days=9,
             items_per_page=100,
             date_from_field='updatedDateTimeFrom',
