@@ -664,3 +664,81 @@ def delete_records_by_date(table_name: str, date_field: str, start_date: str, en
             db_manager.conn.rollback()
     finally:
         db_manager.close()
+
+def delete_records_with_children_by_date(table_name: str, date_field: str, start_date: str, end_date: str):
+    """
+    Xóa các record trong bảng cha và các bảng con có foreign key theo khoảng ngày
+    :param table_name: Tên bảng cha
+    :param date_field: Tên trường ngày tháng (createdDateTime, updatedDateTime, ...)
+    :param start_date: Ngày bắt đầu (có thể là timestamp hoặc string)
+    :param end_date: Ngày kết thúc (có thể là timestamp hoặc string)
+    """
+    db_manager = DatabaseManager()
+    try:
+        if db_manager.connect():
+            # Định nghĩa các bảng con cho từng bảng cha
+            child_tables = {
+                'orders': ['orders_tags', 'orders_products', 'orders_packed', 'orders_facebook', 'orders_vat'],
+                'bills': ['bills_tags', 'bills_products']
+            }
+            
+            # Lấy danh sách bảng con cần xóa
+            tables_to_delete = child_tables.get(table_name, [])
+            
+            # Bước 1: Lấy danh sách ID của các record cần xóa từ bảng cha
+            get_ids_query = f"""
+            SELECT id FROM {table_name}
+            WHERE {date_field} >= ? AND {date_field} < ?
+            """
+            db_manager.cursor.execute(get_ids_query, (start_date, end_date))
+            parent_ids = [row[0] for row in db_manager.cursor.fetchall()]
+            
+            if not parent_ids:
+                print(f"Không có record nào trong bảng {table_name} từ {start_date} đến {end_date}")
+                return
+            
+            print(f"Tìm thấy {len(parent_ids)} record trong bảng {table_name} cần xóa")
+            
+            # Bước 2: Xóa dữ liệu trong các bảng con trước
+            for child_table in tables_to_delete:
+                try:
+                    # Kiểm tra bảng con có tồn tại không
+                    check_table_query = f"""
+                    SELECT COUNT(*) FROM sys.tables WHERE name = '{child_table}'
+                    """
+                    db_manager.cursor.execute(check_table_query)
+                    table_exists = db_manager.cursor.fetchone()[0] > 0
+                    
+                    if table_exists:
+                        # Xóa dữ liệu trong bảng con dựa trên fk_id
+                        delete_child_query = f"""
+                        DELETE FROM {child_table}
+                        WHERE fk_id IN ({','.join(['?' for _ in parent_ids])})
+                        """
+                        db_manager.cursor.execute(delete_child_query, parent_ids)
+                        deleted_count = db_manager.cursor.rowcount
+                        print(f"Đã xóa {deleted_count} record trong bảng con {child_table}")
+                    else:
+                        print(f"Bảng con {child_table} không tồn tại, bỏ qua")
+                except Exception as e:
+                    print(f"Lỗi khi xóa dữ liệu trong bảng con {child_table}: {str(e)}")
+                    db_manager.conn.rollback()
+                    continue
+            
+            # Bước 3: Xóa dữ liệu trong bảng cha
+            delete_parent_query = f"""
+            DELETE FROM {table_name}
+            WHERE {date_field} >= ? AND {date_field} < ?
+            """
+            db_manager.cursor.execute(delete_parent_query, (start_date, end_date))
+            deleted_parent_count = db_manager.cursor.rowcount
+            
+            db_manager.conn.commit()
+            print(f"Đã xóa {deleted_parent_count} record trong bảng {table_name} và các bảng con liên quan")
+            
+    except Exception as e:
+        print(f"Lỗi khi xóa record trong bảng {table_name} và bảng con: {str(e)}")
+        if db_manager.conn:
+            db_manager.conn.rollback()
+    finally:
+        db_manager.close()

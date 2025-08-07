@@ -10,7 +10,7 @@ from api.crm.api.sales import fetch_sales_data
 import logging
 from datetime import datetime
 import pandas as pd
-from service.insertUpdateData import delete_records_by_date
+from service.insertUpdateData import delete_records_by_date, delete_records_with_children_by_date
 
 # Cấu hình logging
 logging.basicConfig(
@@ -36,8 +36,8 @@ def sync_delete_and_reload_orders_bills():
         # Chuyển ngày sang timestamp (milliseconds)
         start_ts = int(start_date.timestamp())
         end_ts = int(end_date.timestamp())
-        delete_records_by_date('orders', 'updatedAt', start_ts, end_ts)
-        delete_records_by_date('bills', 'createdDateTime', start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
+        delete_records_with_children_by_date('orders', 'updatedAt', start_ts, end_ts)
+        delete_records_with_children_by_date('bills', 'createdDateTime', start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
         
         # Đồng bộ lại dữ liệu
         order_service.run_demo(start_date, end_date)
@@ -58,7 +58,7 @@ def main():
         category_service = CategoryService()
         product_service = ProductService()
         customer_service = CustomerService()
-        # sync_delete_and_reload_orders_bills()
+        sync_delete_and_reload_orders_bills()
         # Chạy đồng bộ categories
         logger.info("Bắt đầu đồng bộ categories...")
         # product_service.run_demo()
@@ -78,7 +78,7 @@ def main():
 
         # --- Sử dụng hàm fetch_customer_data từ CRM ---
         # logger.info("Lấy dữ liệu customer từ CRM...")
-        crm_customer = fetch_customer_data()
+        # crm_customer = fetch_customer_data()
         # crm_pre_order = fetch_pre_order_data()
         # crm_pre_order_dr = fetch_pre_order_dr_data()
         # crm_sales = fetch_sales_data()

@@ -12,7 +12,7 @@ import logging
 import schedule
 import time
 from datetime import datetime
-from service.insertUpdateData import delete_records_by_date
+from service.insertUpdateData import delete_records_by_date, delete_records_with_children_by_date
 import pandas as pd
 
 # Cấu hình logging
@@ -80,24 +80,25 @@ def sync_delete_and_reload_orders_bills():
         
         # Tính ngày bắt đầu và kết thúc
         end_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        start_date = (end_date.replace(day=1) - pd.DateOffset(months=2)).replace(day=1)  # Lùi về đầu tháng trước 2 tháng
+        start_date = (end_date.replace(day=1) - pd.DateOffset(months=1)).replace(day=1)  # Lùi về đầu tháng trước 2 tháng
         start_date = start_date.to_pydatetime()
         
         # Chuyển ngày sang timestamp (milliseconds)
         start_ts = int(start_date.timestamp())
         end_ts = int(end_date.timestamp())
-        delete_records_by_date('orders', 'updatedAt', start_ts, end_ts)
-        delete_records_by_date('bills', 'createdDateTime', start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
+        delete_records_with_children_by_date('orders', 'updatedAt', start_ts, end_ts)
+        delete_records_with_children_by_date('bills', 'createdDateTime', start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
         
         # Đồng bộ lại dữ liệu
         order_service.run_demo(start_date, end_date)
         bill_service.run_demo(start_date, end_date)
-        fetch_customer_data()
+        # fetch_customer_data()
         logger.info("Đã xóa và reload orders, bills cho 2 tháng gần nhất!")
     except Exception as e:
         logger.error(f"Lỗi khi xóa và reload orders, bills: {str(e)}")
     finally:
         is_critical_job_running = False
+
 
 def main():
     try:
