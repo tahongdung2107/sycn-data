@@ -22,16 +22,24 @@ def create_table_from_object(obj: Dict[str, Any], table_name: str):
     def create_table(db_manager, table, sample_obj, parent=False):
         columns = []
         for k, v in sample_obj.items():
+            # Chỉ tạo column cho các field có trong response thực tế
             if isinstance(v, list) and v and isinstance(v[0], dict):
+                # Bỏ qua các nested list, sẽ tạo bảng riêng
                 continue
             elif isinstance(v, dict):
+                # Chuyển object thành JSON string
                 columns.append(f'{escape_column_name(k)} {get_sql_type(v)}')
             elif k == 'id':
                 columns.append(f'{escape_column_name(k)} NVARCHAR(255) PRIMARY KEY')
             else:
                 columns.append(f'{escape_column_name(k)} {get_sql_type(v)}')
+        
         if parent:
-            columns.append(f'{escape_column_name("fk_id")} NVARCHAR(255)')
+            # Kiểm tra xem fk_id đã có trong columns chưa
+            fk_id_exists = any('fk_id' in col for col in columns)
+            if not fk_id_exists:
+                columns.append(f'{escape_column_name("fk_id")} NVARCHAR(255)')
+        
         col_str = ', '.join(columns)
         sql = f"""
 IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = N'{table}')

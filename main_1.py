@@ -58,7 +58,7 @@ def main():
         category_service = CategoryService()
         product_service = ProductService()
         customer_service = CustomerService()
-        sync_delete_and_reload_orders_bills()
+        # sync_delete_and_reload_orders_bills()
         # Chạy đồng bộ categories
         logger.info("Bắt đầu đồng bộ categories...")
         # product_service.run_demo()
@@ -81,7 +81,7 @@ def main():
         # crm_customer = fetch_customer_data()
         # crm_pre_order = fetch_pre_order_data()
         # crm_pre_order_dr = fetch_pre_order_dr_data()
-        # crm_sales = fetch_sales_data()
+        crm_sales = fetch_sales_data()
         # print("Kết quả từ CRM:")
 
     except Exception as e:

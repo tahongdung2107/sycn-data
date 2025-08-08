@@ -1,5 +1,5 @@
 from api.crm.service.fetch import call_crm_api
-from api.crm.service.insert_update_customer import insert_or_update_customer
+from api.crm.service.insert_update_customer_final import insert_or_update_customer_final
 from api.crm.service.create_table_customer import create_table_from_object
 import datetime
 
@@ -7,10 +7,11 @@ def fetch_customer_data(start_date=None, end_date=None):
     path = '/_api/base-table/find'
     # Nếu không truyền ngày thì lấy ngày hôm qua
     if not start_date or not end_date:
-        # today = datetime.datetime.now()
-        # start_str = today.strftime('%Y-%m-%dT00:00:00.000Z')
-        start_str = datetime.datetime(2024, 1, 1).strftime('%Y-%m-%dT00:00:00.000Z')
-        end_str = datetime.datetime.now().strftime('%Y-%m-%dT23:59:59.999Z')
+        today = datetime.datetime.now()
+        start_str = today.strftime('%Y-%m-%dT00:00:00.000Z')
+        end_str = today.strftime('%Y-%m-%dT23:59:59.999Z')
+        # start_str = datetime.datetime(2024, 1, 1).strftime('%Y-%m-%dT00:00:00.000Z')
+        # end_str = datetime.datetime.now().strftime('%Y-%m-%dT23:59:59.999Z')
     else:
         start_str = start_date
         end_str = end_date
@@ -69,6 +70,6 @@ def fetch_customer_data(start_date=None, end_date=None):
     if all_data:
         final_result = {'data': all_data}
         print("Bắt đầu insert/update dữ liệu vào database...")
-        insert_or_update_customer(final_result, table_name="crm_data_customer")
+        insert_or_update_customer_final(final_result, table_name="crm_data_customer")
         print("Đã insert/update xong dữ liệu vào database!")
     return {'data': all_data, 'total': total}
